@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "mocha --recursive",
+    "test": "tsc && mocha --recursive",
     "prepare": "npm run build"
   },
   "keywords": [

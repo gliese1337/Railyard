@@ -3,51 +3,61 @@ Railyard
 
 Railyard is a generic shunting-yard parser for parenthesized infix expressions. Want users to be able to input formulae, but don't want to rely on JavaScript's evil `eval`? Then Railyard may be for you.
 
-Currently, Railyard only support binary infix operators. Support for prefix operators, postfix operators, and functions of arbitrary arity is planned for future versions.
+Railyard supports binary infix operators, unary prefix operators, and functions of arbitrary arity.
 
 Usage
 -----
 JavaScript: `const { Railyard } = require('railyard');`
 
-TypeScript: `import { Railyard, AstNode, Token, OpData } from 'railyard';`
+TypeScript: `import { Railyard, AstNode, Token, OpInfo, InfixInfo, FnInfo } from 'railyard';`
 
-Several parser operations return an `OpData` data structure, with info about an instance of an operator in the context of an expression. This data type has the following structure:
+Several parser operations return an `OpInfo` data structure, with info about an instance of an operator in the context of an expression. This is a discriminated union of `InfixInfo` and `FnInfo` structures, which have the following format:
 
+```ts
+type InfixInfo = {
+    type: 'infix';
+    name: string; // String identifying the operator
+    precedence: number; // How tightly this operator binds
+    associativity: "left" | "right"; // In which direction it binds with equal-precedence operators 
+    fn?: (a: unknown, b: unknown) => unknown;  // Optional implementation
+}
+
+type FnInfo = {
+    type: 'function';
+    name: string; // String identifying the operator
+    arity: number; // How many arguments the function takes
+    fn?: (...args: unknown[]) => unknown; // Optional implementation
+}
 ```
-type OpData = {
-  name: string,
-  precedence: number;
-  arity: number;
-  associativity: "left" | "right";
-  fn?: (a: unknown, b: unknown) => unknown;
-};
-```
 
-In the current version, `arity` is always `2`. This will change as support for prefix and postfix operators and functions is added.
 
 Creating a new parser is as easy as `const parser = new Railyard();`. After that, you will need to tell your parser about the operators that you want it to recognize:
 
-```
-parser.register('^', 9, "right", Math.pow);
-parser.register('*', 8, "left", (a, b) => a * b);
-parser.register('/', 8, "left", (a, b) => a / b);
-parser.register('%', 8, "left", (a, b) => a % b);
-parser.register('+', 8, "left", (a, b) => a + b);
-parser.register('-', 8, "left", (a, b) => a - b);
+```ts
+const parser = new Railyard()
+    .register({ type: 'infix', name: '^', precedence: 9, associativity: "right", fn: Math.pow })
+    .register({ type: 'infix', name: '*', precedence: 8, associativity: "left", fn: (a, b) => a * b })
+    .register({ type: 'infix', name: '/', precedence: 8, associativity: "left", fn: (a, b) => a / b })
+    .register({ type: 'infix', name: '%', precedence: 8, associativity: "left", fn: (a, b) => a % b })
+    .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: (a, b) => a + b })
+    .register({ type: 'infix', name: '-', precedence: 8, associativity: "left", fn: (a, b) => a - b })
+    .register({ type: 'function', name: '-', arity: 1, fn: (a) => -a })
+    .register({ type: 'function', name: 'sin', arity: 1, fn: Math.sin })
+    .register({ type: 'function', name: 'xor', arity: 2, fn: (a, b) => a ^ b });
 ```
 
-The `parser.register` method takes in a string identifying the operator, a precedence level, an associativity (left associative or right associative), and an optional JavaScript function implementing the operator. If you do not provide implementations, the parser can still *parse*, but it will not be able to evaluate the parsed expressions. 
+The `parser.register` method takes an `OpInfo` object--either `InfixInfo` or `FnInfo`. Function calls bind more tightly than any infix operators, and are right-associative. If you do not provide implementations, the parser can still *parse*, but it will not be able to evaluate the parsed expressions.
+
+Note that, by default, functions with an arity of 1 (unary functions) are treated as unary prefix operators. I.e., `sin ( t )` parses identically to `sin t`. However, due to the maximal binding precedence of function calls, `sin 2 + 3` is equal to `sin ( 2 ) + 3`, *not* `sin ( 2 + 3 )`. Similarly, `a + - b * c` is equivalent to `a + ( - ( b ) ) * c`.
 
 At this point, you can call
-* `parser.parseToRPN(tokens: Iterable<string>): Generator<Token>` This method returns a version of the input expression converted into de-parenthesized Reverse Polish Notation, with each original string token wrapped up in a `Token` data structure indicating whether it was originally an input value or an operator. The structure of the `Token` data type is `type Token = { type: "value"; value: string; } | { type: "operator"; value: OpData; };`
-* `parser.parseToAST(tokens: Iterable<string>): AstNode` This method returns a data structure describing the fully-disambiguated parsed expression. The structure of the `AstNode` data type is `type AstNode = { type: "operator" ;value: { op: OpData; args: AstNode[]; }; } | { type: "value"; value: string; };`
+* `parser.parseToRPN(tokens: Iterable<string>): Generator<Token>` This method returns a version of the input expression converted into de-parenthesized Reverse Polish Notation, with each original string token wrapped up in a `Token` data structure indicating whether it was originally an input value or an operator. The structure of the `Token` data type is `type Token = { type: "value"; value: string; } | { type: "operator"; value: OpInfo; };`
+* `parser.parseToAST(tokens: Iterable<string>): AstNode` This method returns a data structure describing the fully-disambiguated parsed expression. The structure of the `AstNode` data type is `type AstNode = { type: "operator"; value: { op: OpInfo; args: AstNode[]; }; } | { type: "value"; value: string; };`
 * `parser.parseToSExpr(tokens: Iterable<string>): string` This method returns a version of the expression in fully-parenthesized S-expression format, similar to LISP code. This is meant primarily for debugging.
 
 Note that all of these methods require the input to be pre-tokenized. Railyard does not know anything about your lexical grammar.
 
-Examples:
-
-`[...parser.parseToRPN(['3', '*', '(', '2', '+', '1', ')'])] === ['3', '2', '1', '+', '*']`
+Example:
 
 `parser.parseToSExpr('2 ^ 2 ^ 3 * b * ( a + 3 )'.split(' '))) === '(* (* (^ 2 (^ 2 3)) b) (+ a 3))'`
 
@@ -59,7 +69,7 @@ If you have provided implementations for all operators used in a particular expr
 
 However, you can also provide your own lookup function for interpreting non-operator tokens however you want, using the `parser.lookup(fn: (s: string) => unknown)` method; e.g., for looking up variable names:
 
-```
+```ts
 const env = {
   a: 3,
   b: 5,
@@ -73,4 +83,7 @@ parser.lookup((v) => {
 parser.interpret('2 ^ 2 ^ 3 b ( a + 3 )'.split(' ')) === 7680
 ```
 
-Before or after registering operator definitions, you can also optionally tell Railyard to use a default operator for values in hiatus; i.e., calling `parser.setImplicitOp('*');` will cause it to interpret the input `['a', '(', 'b', '+', '1', ')']` as equivalent to `['a', '*', '(', 'b', '+', '1', ')']`. Or, `parser.interpret('a ( b + 1 )'.split(' ')) === parser.interpret('a * ( b + 1 )'.split(' '))`.
+Railyard also has a couple of auxiliary methods to tweak the behavior of the parser. Before or after registering operator definitions, you can also optionally
+
+* use `parser.setImplicitOp(token: string)` to tell Railyard to use a default infix operator for values in hiatus; i.e., calling `parser.setImplicitOp('*');` will cause it to interpret the input `['a', '(', 'b', '+', '1', ')']` as equivalent to `['a', '*', '(', 'b', '+', '1', ')']`; i.e., `parser.interpret('a ( b + 1 )'.split(' ')) === parser.interpret('a * ( b + 1 )'.split(' '))`. Setting a certain operator token as the implicit operator does not change its precedence! If you want, e.g., implicit multiplication and explicit multiplication to have different precedence, you must register different operators with the same implementation.
+* use `parser.unaryFnAsPrefix(flag: boolean)` to tell Railyard whether to permit calling unary functions as unary prefix operators without parentheses. The default is `true`. If set to `false`, examples like `sin t` will throw an error, requiring `sin ( t )` instead.
