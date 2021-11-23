@@ -1,16 +1,72 @@
+export const ADD: unique symbol = Symbol();
+export const SUB: unique symbol = Symbol();
+export const MUL: unique symbol = Symbol();
+export const DIV: unique symbol = Symbol();
+export const REM: unique symbol = Symbol();
+
+export const XOR: unique symbol = Symbol();
+export const XNR: unique symbol = Symbol();
+export const AND: unique symbol = Symbol();
+export const NND: unique symbol = Symbol();
+export const ORR: unique symbol = Symbol();
+export const NOR: unique symbol = Symbol();
+
+export const NEG: unique symbol = Symbol();
+export const INV: unique symbol = Symbol();
+export const NOT: unique symbol = Symbol();
+
+export type Intrinsic =
+  typeof ADD | typeof SUB | typeof MUL | typeof DIV | typeof REM |
+  typeof XOR | typeof XNR | typeof AND | typeof NND | typeof ORR | typeof NOR |
+  typeof NEG | typeof INV | typeof NOT;
+
+const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
+  [ADD]: (a: number, b: number) => a + b,
+  [SUB]: (a: number, b: number) => a - b,
+  [MUL]: (a: number, b: number) => a * b,
+  [DIV]: (a: number, b: number) => a / b,
+  [REM]: (a: number, b: number) => a % b,
+  [XOR]: (a: number, b: number) => a ^ b,
+  [XNR]: (a: number, b: number) => ~(a ^ b),
+  [AND]: (a: number, b: number) => a & b,
+  [NND]: (a: number, b: number) => ~(a & b),
+  [ORR]: (a: number, b: number) => a | b,
+  [NOR]: (a: number, b: number) => ~(a | b),
+  [NEG]: (a: number) => -a,
+  [INV]: (a: number) => ~a,
+  [NOT]: (a: number) => !a,
+};
+
+const cFns: { [key in Intrinsic]: (...args: string[]) => string } = {
+  [ADD]: (a: string, b: string) => `(${a}+${b})`,
+  [SUB]: (a: string, b: string) => `(${a}-${b})`,
+  [MUL]: (a: string, b: string) => `(${a}*${b})`,
+  [DIV]: (a: string, b: string) => `(${a}/${b})`,
+  [REM]: (a: string, b: string) => `(${a}%${b})`,
+  [XOR]: (a: string, b: string) => `(${a}^${b})`,
+  [XNR]: (a: string, b: string) => `(~(${a}^${b}))`,
+  [AND]: (a: string, b: string) => `((${a})&(${b}))`,
+  [NND]: (a: string, b: string) => `(~(${a}&${b}))`,
+  [ORR]: (a: string, b: string) => `(${a}|${b})`,
+  [NOR]: (a: string, b: string) => `(~(${a}|${b}))`,
+  [NEG]: (a: string) => `(-${a})`,
+  [INV]: (a: string) => `(~${a})`,
+  [NOT]: (a: string) => `(!${a})`,
+};
+
 export type InfixInfo = {
   type: 'infix'
   name: string,
   precedence: number;
   associativity: "left" | "right";
-  fn?: (a: any, b: any) => unknown;
+  fn?: Intrinsic | ((a: any, b: any) => unknown);
 };
 
 export type FnInfo = {
   type: 'function'
   name: string,
   arity: number;
-  fn?: (...args: any[]) => unknown;
+  fn?: Intrinsic | ((...args: any[]) => unknown);
 };
 
 export type OpInfo = InfixInfo | FnInfo;
@@ -86,6 +142,7 @@ function * match_paren(stack: StackData[], error: string) {
 }
 
 function extract_impl(op: OpInfo) {
+  if (typeof op.fn === 'symbol') { return iFns[op.fn]; }
   if (typeof op.fn !== 'function') {
     throw new Error(`No implementation for operator ${ op.name }`);
   }
@@ -262,7 +319,7 @@ export class Railyard {
   }
 
   public interpret(tokens: Iterable<string>){
-    return this._interpret(tokens, extract_impl, this.wrap);
+    return this._interpret<unknown>(tokens, extract_impl, this.wrap);
   }
 
   public partial(tokens: Iterable<string>){
@@ -270,16 +327,22 @@ export class Railyard {
     const missingImpls = new Set<string>();
     const missingVals = new Set<string>();
     const impl = (op: OpInfo) => (...args: AstNode[]) => {
-      if (typeof op.fn !== 'function') {
-        missingImpls.add(op.name);
+      let { fn } = op;
+
+      if (typeof fn === 'symbol') { fn = iFns[fn]; }
+
+      if (typeof fn !== 'function') {
+         missingImpls.add(op.name);
         return { type: "operator", value: { op, args } } as OpNode;
       }
+
       if (args.every(({ type }) => type === 'result')) {
         const arg_vals = args.map(a => a.value);
-        return { type: 'result', value: op.fn.apply(null, arg_vals as any) } as ResultNode;
+        return { type: 'result', value: fn.apply(null, arg_vals as any) } as ResultNode;
       }
       return { type: "operator", value: { op, args } } as OpNode;
     };
+
     const val = (value: string) => {
       if (missingVals.has(value)) {
         return { type: "value", value } as ValNode;
@@ -305,28 +368,48 @@ export class Railyard {
     const { wrap } = this;
     const missingImpls = new Set<string>();
     const missingVals = new Set<string>();
-    const context: { [key: number]: unknown } = {};
     const idmap = new Map<string, number>();
+
     let id = 0;
+    let context: { [key: number]: unknown } = {};
 
     const impl = (op: OpInfo) => (...args: string[]) => {
-      if (typeof op.fn !== 'function') {
+      let { fn } = op;
+
+      if (typeof fn === 'undefined') {
         missingImpls.add(op.name);
         return `a[${JSON.stringify(op.name)}](${args.join(',')})`;
       }
+
+      const can_eval = args.every(a => a[0] === 'c')
+
+      if (typeof fn === 'symbol') {
+        if (!can_eval) {
+          const cfn = cFns[fn]; 
+          if (typeof cfn !== 'function') {
+            missingImpls.add(op.name);
+            return `a[${JSON.stringify(op.name)}](${args.join(',')})`;
+          }
+          return cFns[fn].apply(null, args);
+        }
+        fn = iFns[fn];
+      }
+
       let fid = idmap.get(op.name);
       if (typeof fid === 'undefined') {
         fid = id++;
         idmap.set(op.name, fid);
-        context[fid] = op.fn;
+        context[fid] = fn;
       }
-      if (args.every(a => a[0] === 'c')) {
+
+      if (can_eval) {
         const arg_vals = args.map(a => context[a.substring(2, a.length-1) as unknown as number]);
-        const result = op.fn.apply(null, arg_vals as any);
+        const result = fn.apply(null, arg_vals as any);
         const rid = id++;
         context[rid] = result;
         return `c[${rid}]`;
       }
+
       return `(c[${fid}](${args.join(',')}))`;
     };
 
@@ -351,11 +434,42 @@ export class Railyard {
       }
     };
 
-    const body = `return ${this._interpret<string>(tokens, impl, val)};`;
-    let fn = (new Function('c', 'a', body)).bind(null, context);
+    let expr = this._interpret<string>(tokens, impl, val);
+
+    // Substitute literal values into the body expression,
+    // and keep track of which values cannot be substituted.
+    const used = new Set<number>();
+    expr = expr.replace(/c\[(\d+)]/g,
+      (m, d) => {
+        const v = context[d];
+        switch (typeof v) {
+          case 'string':
+          case 'number':
+          case 'boolean':
+            return JSON.stringify(v);
+          default:
+            used.add(+d);
+            return m;
+        }
+      }
+    );
+
+    // Release memory for values that don't
+    // need to be kept in the context.
+    if (used.size === 0) {
+      context = null as any;
+    } else for (id--; id >= 0; id--) {
+      if (!used.has(id)) { delete context[id]; }
+    }
+
+    let fn: Function;
+    const body = `return ${expr};`;
     if (missingVals.size + missingImpls.size === 0) {
-      const result = fn();
-      fn = () => result;
+      if (context === null) { fn = new Function(body); }
+      else { fn = (new Function('c', body)).bind(null, context); }
+    } else {
+      if (context === null) { fn = new Function('a', body); }
+      else { fn = (new Function('c', 'a', body)).bind(null, context); }
     }
 
     return {

@@ -1,15 +1,14 @@
 import 'mocha';
-import { Railyard } from '../src';
+import { ADD, DIV, MUL, Railyard, SUB } from '../src';
 import { expect } from 'chai';
 
 describe("Test compiler", () => {
   const parser = new Railyard()
     .register({ type: 'infix', name: '^', precedence: 9, associativity: "right" })
-    .register({ type: 'infix', name: '*', precedence: 8, associativity: "left", fn: (a, b) => a * b })
-    .register({ type: 'infix', name: '/', precedence: 8, associativity: "left", fn: (a, b) => a / b })
-    .register({ type: 'infix', name: '%', precedence: 8, associativity: "left", fn: (a, b) => a % b })
-    .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: (a, b) => a + b })
-    .register({ type: 'infix', name: '-', precedence: 8, associativity: "left", fn: (a, b) => a - b })
+    .register({ type: 'infix', name: '*', precedence: 8, associativity: "left", fn: MUL })
+    .register({ type: 'infix', name: '/', precedence: 8, associativity: "left", fn: DIV })
+    .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: ADD })
+    .register({ type: 'infix', name: '-', precedence: 8, associativity: "left", fn: SUB })
     .lookup((v) => {
       if (v === 'pi') return Math.PI;
       const n = parseFloat(v);

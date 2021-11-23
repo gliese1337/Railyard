@@ -7,9 +7,28 @@ Railyard supports binary infix operators, unary prefix operators, and functions 
 
 Usage
 -----
-JavaScript: `const { Railyard } = require('railyard');`
+JavaScript:
+```js
+const {
+  Railyard,
+  ADD, SUB, MUL, DIV, REM,
+  XOR, XNR, AND, NND, ORR, NOR
+  NEG, INV, NOT,
+} = require('railyard');
+```
 
-TypeScript: `import { Railyard, OpNode, ValNode, ResultNode, AstNode, ValToken, OpToken, Token, InfixInfo, FnInfo, OpInfo } from 'railyard';`
+TypeScript:
+```ts
+import {
+  Railyard,
+  OpNode, ValNode, ResultNode, AstNode,
+  ValToken, OpToken, Token,
+  InfixInfo, FnInfo, OpInfo,
+  ADD, SUB, MUL, DIV, REM,
+  XOR, XNR, AND, NND, ORR, NOR
+  NEG, INV, NOT, Intrinsic,
+} from 'railyard';`
+```
 
 Several parser operations return an `OpInfo` data structure, with info about an instance of an operator in the context of an expression. This is a discriminated union of `InfixInfo` and `FnInfo` structures, which have the following format:
 
@@ -19,14 +38,14 @@ type InfixInfo = {
     name: string; // String identifying the operator
     precedence: number; // How tightly this operator binds
     associativity: "left" | "right"; // In which direction it binds with equal-precedence operators 
-    fn?: (a: unknown, b: unknown) => unknown;  // Optional implementation
+    fn?: Intrinsic | ((a: any, b: any) => unknown);  // Optional implementation
 }
 
 type FnInfo = {
     type: 'function';
     name: string; // String identifying the operator
     arity: number; // How many arguments the function takes
-    fn?: (...args: unknown[]) => unknown; // Optional implementation
+    fn?: Intrinsic | ((...args: any[]) => unknown); // Optional implementation
 }
 ```
 
@@ -48,6 +67,23 @@ const parser = new Railyard()
 The `parser.register` method takes an `OpInfo` object--either `InfixInfo` or `FnInfo`. Function calls bind more tightly than any infix operators, and are right-associative. If you do not provide implementations, the parser can still *parse*, but it will not be able to evaluate the parsed expressions.
 
 Note that, by default, functions with an arity of 1 (unary functions) are treated as unary prefix operators. I.e., `sin ( t )` parses identically to `sin t`. However, due to the maximal binding precedence of function calls, `sin 2 + 3` is equal to `sin ( 2 ) + 3`, *not* `sin ( 2 + 3 )`. Similarly, `a + - b * c` is equivalent to `a + ( - ( b ) ) * c`.
+
+A number of `Intrinsic` symbols are provided that you can use for implementations of basic JavaScript operators, without having to provide your own function. Thus, the above registration could be done as follows instead:
+
+```ts
+const parser = new Railyard()
+    .register({ type: 'infix', name: '^', precedence: 9, associativity: "right", fn: Math.pow })
+    .register({ type: 'infix', name: '*', precedence: 8, associativity: "left", fn: MUL })
+    .register({ type: 'infix', name: '/', precedence: 8, associativity: "left", fn: DIV })
+    .register({ type: 'infix', name: '%', precedence: 8, associativity: "left", fn: REM })
+    .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: ADD })
+    .register({ type: 'infix', name: '-', precedence: 8, associativity: "left", fn: SUB })
+    .register({ type: 'function', name: '-', arity: 1, fn: NEG })
+    .register({ type: 'function', name: 'sin', arity: 1, fn: Math.sin })
+    .register({ type: 'function', name: 'xor', arity: 2, fn: XOR });
+```
+
+The use of `Intrinsic`s makes not difference to parsing, interpretation, or partial evaluation, but does improve the performance of compiled expressions, and can be convenient to avoid re-implementing lots of simple functions anyway.
 
 At this point, you can call
 * `parser.parseToRPN(tokens: Iterable<string>): Generator<Token>` This method returns a version of the input expression converted into de-parenthesized Reverse Polish Notation, with each original string token wrapped up in a `Token` data structure indicating whether it was originally an input value or an operator. The structure of the `Token` data type is `type Token = { type: "value"; value: string; } | { type: "operator"; value: OpInfo; };`
@@ -93,3 +129,27 @@ Railyard also has a couple of auxiliary methods to tweak the behavior of the par
 
 * use `parser.setImplicitOp(token: string)` to tell Railyard to use a default infix operator for values in hiatus; i.e., calling `parser.setImplicitOp('*');` will cause it to interpret the input `['a', '(', 'b', '+', '1', ')']` as equivalent to `['a', '*', '(', 'b', '+', '1', ')']`; i.e., `parser.interpret('a ( b + 1 )'.split(' ')) === parser.interpret('a * ( b + 1 )'.split(' '))`. Setting a certain operator token as the implicit operator does not change its precedence! If you want, e.g., implicit multiplication and explicit multiplication to have different precedence, you must register different operators with the same implementation.
 * use `parser.unaryFnAsPrefix(flag: boolean)` to tell Railyard whether to permit calling unary functions as unary prefix operators without parentheses. The default is `true`. If set to `false`, examples like `sin t` will throw an error, requiring `sin ( t )` instead.
+
+Appendix: Intrinsic Implementations
+-----------------------------------
+
+The complete list of available `Intrinsic` functions is as follows:
+
+```ts
+{
+  [ADD]: (a, b) => a + b,
+  [SUB]: (a, b) => a - b,
+  [MUL]: (a, b) => a * b,
+  [DIV]: (a, b) => a / b,
+  [REM]: (a, b) => a % b,
+  [XOR]: (a, b) => a ^ b,
+  [XNR]: (a, b) => ~(a ^ b),
+  [AND]: (a, b) => a & b,
+  [NND]: (a, b) => ~(a & b),
+  [ORR]: (a, b) => a | b,
+  [NOR]: (a, b) => ~(a | b),
+  [NEG]: a => -a,
+  [INV]: a => ~a,
+  [NOT]: a => !a,
+}
+```

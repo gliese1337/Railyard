@@ -1,5 +1,5 @@
 import 'mocha';
-import { Railyard } from '../src';
+import { ADD, Railyard } from '../src';
 import { expect } from 'chai';
 
 describe("Test partial evaluator", () => {
@@ -7,8 +7,7 @@ describe("Test partial evaluator", () => {
     .register({ type: 'infix', name: '^', precedence: 9, associativity: "right", fn: Math.pow })
     .register({ type: 'infix', name: '*', precedence: 8, associativity: "left" })
     .register({ type: 'infix', name: '/', precedence: 8, associativity: "left", fn: (a, b) => a / b })
-    .register({ type: 'infix', name: '%', precedence: 8, associativity: "left", fn: (a, b) => a % b })
-    .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: (a, b) => a + b })
+    .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: ADD })
     .register({ type: 'infix', name: '-', precedence: 8, associativity: "left", fn: (a, b) => a - b })
     .lookup((v) => {
       const n = parseFloat(v);
