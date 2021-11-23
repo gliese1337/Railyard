@@ -9,7 +9,7 @@ Usage
 -----
 JavaScript: `const { Railyard } = require('railyard');`
 
-TypeScript: `import { Railyard, AstNode, Token, OpInfo, InfixInfo, FnInfo } from 'railyard';`
+TypeScript: `import { Railyard, OpNode, ValNode, ResultNode, AstNode, ValToken, OpToken, Token, InfixInfo, FnInfo, OpInfo } from 'railyard';`
 
 Several parser operations return an `OpInfo` data structure, with info about an instance of an operator in the context of an expression. This is a discriminated union of `InfixInfo` and `FnInfo` structures, which have the following format:
 
@@ -29,7 +29,6 @@ type FnInfo = {
     fn?: (...args: unknown[]) => unknown; // Optional implementation
 }
 ```
-
 
 Creating a new parser is as easy as `const parser = new Railyard();`. After that, you will need to tell your parser about the operators that you want it to recognize:
 
@@ -55,13 +54,11 @@ At this point, you can call
 * `parser.parseToAST(tokens: Iterable<string>): AstNode` This method returns a data structure describing the fully-disambiguated parsed expression. The structure of the `AstNode` data type is `type AstNode = { type: "operator"; value: { op: OpInfo; args: AstNode[]; }; } | { type: "value"; value: string; };`
 * `parser.parseToSExpr(tokens: Iterable<string>): string` This method returns a version of the expression in fully-parenthesized S-expression format, similar to LISP code. This is meant primarily for debugging.
 
-Note that all of these methods require the input to be pre-tokenized. Railyard does not know anything about your lexical grammar.
-
 Example:
 
 `parser.parseToSExpr('2 ^ 2 ^ 3 * b * ( a + 3 )'.split(' '))) === '(* (* (^ 2 (^ 2 3)) b) (+ a 3))'`
 
-If you have provided implementations for all operators used in a particular expression, then you can use
+If you have provided implementations for *all* operators used in a particular expression, then you can use
 
 * `parser.interpret(tokens: Iterable<string>): unknown` This method will attempt to apply your operator definitions to the appropriate arguments to produce a value. By default, everything token that is not recognized as a registered operator name is treated as an input value, and by default all inputs are interpreted as decimal floating-point numbers with JavaScript's built-in `parseFloat` function.
 
@@ -82,6 +79,15 @@ parser.lookup((v) => {
 
 parser.interpret('2 ^ 2 ^ 3 b ( a + 3 )'.split(' ')) === 7680
 ```
+
+If you do not have complete operator implementations, you can still use the `partial` and `compile` methods:
+
+* `parser.partial(tokens: Iterable<string>): { ast: AstNode; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns the resulting minimized AST, along with sets of the names of unimplemented methods and missing values that would be needed to complete evaluation. Thhe structure of the `ASTNode` data type is augmented in this case as follows: `type AstNode = { type: "operator"; value: { op: OpInfo; args: AstNode[]; }; } | { type: "result"; value: string; };`, in which a `ResultNode` indicates a final value, which should not be evaluated any further.
+* `parser.compile(tokens: Iterable<string>): { fn: Function; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns a compiled JavaScript function which can complete evaluation of the expression when given the necessary missing values, along with the names of unimplemented methods and missing values that it needs. To run the returned function, pass in an object whose keys are the missing operator and value names.
+
+The `partial` and `compile` methods depend on a `lookup` function having been set which will throw an exception for missing values. Otherwise, whatever you feel like returning will be treated as a perfectly respectable value and passed on to later stages of evaluation, without recording any missing inputs.
+
+Note that all of these methods require the input to be pre-tokenized. Railyard does not know anything about your lexical grammar.
 
 Railyard also has a couple of auxiliary methods to tweak the behavior of the parser. Before or after registering operator definitions, you can also optionally
 

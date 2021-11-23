@@ -3,38 +3,51 @@ export type InfixInfo = {
   name: string,
   precedence: number;
   associativity: "left" | "right";
-  fn?: (a: unknown, b: unknown) => unknown;
+  fn?: (a: any, b: any) => unknown;
 };
 
 export type FnInfo = {
   type: 'function'
   name: string,
   arity: number;
-  fn?: (...args: unknown[]) => unknown;
+  fn?: (...args: any[]) => unknown;
 };
 
 export type OpInfo = InfixInfo | FnInfo;
 
 type StackData = '(' | ',' | ')' | OpInfo;
 
-export type Token = {
+export type ValToken = {
   type: "value";
   value: string;
-} | {
+};
+
+export type OpToken = {
   type: "operator";
   value: OpInfo;
 };
 
-export type AstNode = {
+export type Token = ValToken | OpToken;
+
+export type OpNode = {
   type: "operator";
   value: {
     op: OpInfo;
     args: AstNode[];
   }
-} | {
+};
+
+export type ValNode = {
   type: "value";
   value: string;
 };
+
+export type ResultNode = {
+  type: "result";
+  value: unknown;
+};
+
+export type AstNode = OpNode | ValNode | ResultNode;
 
 function * handle_op(stack: StackData[], { precedence, associativity }: InfixInfo) {
   if (associativity === 'right') {
@@ -250,5 +263,107 @@ export class Railyard {
 
   public interpret(tokens: Iterable<string>){
     return this._interpret(tokens, extract_impl, this.wrap);
+  }
+
+  public partial(tokens: Iterable<string>){
+    const { wrap } = this;
+    const missingImpls = new Set<string>();
+    const missingVals = new Set<string>();
+    const impl = (op: OpInfo) => (...args: AstNode[]) => {
+      if (typeof op.fn !== 'function') {
+        missingImpls.add(op.name);
+        return { type: "operator", value: { op, args } } as OpNode;
+      }
+      if (args.every(({ type }) => type === 'result')) {
+        const arg_vals = args.map(a => a.value);
+        return { type: 'result', value: op.fn.apply(null, arg_vals as any) } as ResultNode;
+      }
+      return { type: "operator", value: { op, args } } as OpNode;
+    };
+    const val = (value: string) => {
+      if (missingVals.has(value)) {
+        return { type: "value", value } as ValNode;
+      }
+      try {
+        return { type: 'result', value: wrap(value) } as ResultNode;
+      } catch(_) {
+        missingVals.add(value);
+        return { type: "value", value } as ValNode;
+      }
+    };
+
+    return {
+      ast: this._interpret<AstNode>(tokens, impl, val),
+      free: {
+        ops: missingImpls,
+        vars: missingVals,
+      }
+    };
+  }
+
+  public compile(tokens: Iterable<string>){
+    const { wrap } = this;
+    const missingImpls = new Set<string>();
+    const missingVals = new Set<string>();
+    const context: { [key: number]: unknown } = {};
+    const idmap = new Map<string, number>();
+    let id = 0;
+
+    const impl = (op: OpInfo) => (...args: string[]) => {
+      if (typeof op.fn !== 'function') {
+        missingImpls.add(op.name);
+        return `a[${JSON.stringify(op.name)}](${args.join(',')})`;
+      }
+      let fid = idmap.get(op.name);
+      if (typeof fid === 'undefined') {
+        fid = id++;
+        idmap.set(op.name, fid);
+        context[fid] = op.fn;
+      }
+      if (args.every(a => a[0] === 'c')) {
+        const arg_vals = args.map(a => context[a.substring(2, a.length-1) as unknown as number]);
+        const result = op.fn.apply(null, arg_vals as any);
+        const rid = id++;
+        context[rid] = result;
+        return `c[${rid}]`;
+      }
+      return `c[${fid}](${args.join(',')})`;
+    };
+
+    const val = (value: string) => {
+      if (missingVals.has(value)) {
+        return `a[${JSON.stringify(value)}]`;
+      }
+      
+      if (idmap.has(value)) {
+        return `c[${idmap.get(value) as number}]`;
+      }
+
+      try {
+        const result = wrap(value);
+        const vid = id++;
+        idmap.set(value, vid);
+        context[vid] = result;
+        return `c[${vid}]`;
+      } catch(_) {
+        missingVals.add(value);
+        return `a[${JSON.stringify(value)}]`;
+      }
+    };
+
+    const body = `return ${this._interpret<string>(tokens, impl, val)};`;
+    let fn = (new Function('c', 'a', body)).bind(null, context);
+    if (missingVals.size + missingImpls.size === 0) {
+      const result = fn();
+      fn = () => result;
+    }
+
+    return {
+      fn,
+      free: {
+        ops: missingImpls,
+        vars: missingVals,
+      }
+    };
   }
 }
