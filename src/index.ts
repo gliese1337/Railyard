@@ -327,7 +327,7 @@ export class Railyard {
         context[rid] = result;
         return `c[${rid}]`;
       }
-      return `c[${fid}](${args.join(',')})`;
+      return `(c[${fid}](${args.join(',')}))`;
     };
 
     const val = (value: string) => {
