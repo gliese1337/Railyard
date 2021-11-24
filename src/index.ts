@@ -88,26 +88,33 @@ const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
   [NOT]: (a: number) => !a,
 };
 
-function iis(c: { [key: number]: unknown }, e: string, v: unknown) {
-  if (e[0] !== 'c') { return false; }
-  return v === c[e.substring(2, e.length-1) as unknown as number];
+type CVal = { t: 'v'; e: string; v: unknown; };
+type CXpr = { t: 'x'; e: string; };
+type CTrm = CVal | CXpr;
+
+const cval = (e: string, v: unknown) => ({t:'v',e,v} as CVal);
+const cxpr = (e: string) => ({t:'x',e} as CXpr);
+
+function iis(e: CTrm, v: unknown) {
+  if (e.t === 'x') { return false; }
+  return v === e.v;
 }
 
-const cFns: { [key in Intrinsic]: (c: { [key: number]: unknown }, ...args: string[]) => string } = {
-  [ADD]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? b : iis(c,b,0) ? a : `(${a}+${b})`,
-  [SUB]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? (iis(c,b,0) ? '0' : `(-${b})`) : (iis(c,b,0) ? a : `(${a}-${b})`),
-  [MUL]: (c: { [key: number]: unknown }, a: string, b: string) => (iis(c,a,0) || iis(c,b,0)) ? '0' : iis(c,a,1) ? b : iis(c,b,1) ? a : `(${a}*${b})`,
-  [DIV]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? '0' : iis(c,b,1) ? a : `(${a}/${b})`,
-  [REM]: (_: { [key: number]: unknown }, a: string, b: string) => `(${a}%${b})`,
-  [XOR]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? b : iis(c,b,0) ? a : `(${a}^${b})`,
-  [XNR]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? `(~${b})` : iis(c,b,0) ? `(~${a})` : `(~(${a}^${b}))`,
-  [AND]: (c: { [key: number]: unknown }, a: string, b: string) => (iis(c,a,0) || iis(c,b,0)) ? '0' : `(${a}&${b})`,
-  [NND]: (_: { [key: number]: unknown }, a: string, b: string) => `(~(${a}&${b}))`,
-  [ORR]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? b : iis(c,b,0) ? a : `(${a}|${b})`,
-  [NOR]: (_: { [key: number]: unknown }, a: string, b: string) => `(~(${a}|${b}))`,
-  [NEG]: (c: { [key: number]: unknown }, a: string) => iis(c,a,0) ? '0' : `(-${a})`,
-  [INV]: (_: { [key: number]: unknown }, a: string) => `(~${a})`,
-  [NOT]: (_: { [key: number]: unknown }, a: string) => `(!${a})`,
+const cFns: { [key in Intrinsic]: (...args: CTrm[]) => CTrm } = {
+  [ADD]: (a: CTrm, b: CTrm) => iis(a,0) ? b : iis(b,0) ? a : cxpr(`(${a.e}+${b.e})`),
+  [SUB]: (a: CTrm, b: CTrm) => iis(a,0) ? cxpr(`(-${b.e})`) : iis(b,0) ? a : cxpr(`(${a.e}-${b.e})`),
+  [MUL]: (a: CTrm, b: CTrm) => iis(a,0) ? a : iis(b,0) ? b : iis(a,1) ? b : iis(b,1) ? a : cxpr(`(${a.e}*${b.e})`),
+  [DIV]: (a: CTrm, b: CTrm) => iis(a,0) ? a : iis(b,1) ? a : cxpr(`(${a.e}/${b.e})`),
+  [REM]: (a: CTrm, b: CTrm) => cxpr(`(${a.e}%${b.e})`),
+  [XOR]: (a: CTrm, b: CTrm) => iis(a,0) ? b : iis(b,0) ? a : cxpr(`(${a.e}^${b.e})`),
+  [XNR]: (a: CTrm, b: CTrm) => iis(a,0) ? cxpr(`(~${b.e})`) : iis(b,0) ? cxpr(`(~${a.e})`) : cxpr(`(~(${a.e}^${b.e}))`),
+  [AND]: (a: CTrm, b: CTrm) => iis(a,0) ? a : iis(b,0) ? b : cxpr(`(${a.e}&${b.e})`),
+  [NND]: (a: CTrm, b: CTrm) => cxpr(`(~(${a.e}&${b.e}))`),
+  [ORR]: (a: CTrm, b: CTrm) => iis(a,0) ? b : iis(b,0) ? a : cxpr(`(${a.e}|${b.e})`),
+  [NOR]: (a: CTrm, b: CTrm) => cxpr(`(~(${a.e}|${b.e}))`),
+  [NEG]: (a: CTrm) => iis(a,0) ? a : cxpr(`(-${a.e})`),
+  [INV]: (a: CTrm) => cxpr(`(~${a.e})`),
+  [NOT]: (a: CTrm) => cxpr(`(!${a.e})`),
 };
 
 function pis(n: AstNode, v: unknown) {
@@ -121,12 +128,12 @@ const opr = (op: OpInfo, ...args: AstNode[]) => ({ type: 'operator', value: { op
 const pFns: { [key in Intrinsic]: (op: OpInfo, ...args: AstNode[]) => AstNode } = {
   [ADD]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
   [SUB]: (op: OpInfo, a: AstNode, b: AstNode) => pis(b,0) ? a : opr(op,a,b),
-  [MUL]: (op: OpInfo, a: AstNode, b: AstNode) => (pis(a,0) || pis(b,0)) ? res(0) : pis(a,1) ? b : pis(b,1) ? a : opr(op,a,b),
+  [MUL]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? a : pis(b,0) ? b : pis(a,1) ? b : pis(b,1) ? a : opr(op,a,b),
   [DIV]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? res(0) : pis(b,1) ? a : opr(op,a,b),
   [REM]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
   [XOR]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
   [XNR]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
-  [AND]: (op: OpInfo, a: AstNode, b: AstNode) => (pis(a,0) || pis(b,0)) ? res(0) : opr(op,a,b),
+  [AND]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? a : pis(b,0) ? b : opr(op,a,b),
   [NND]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
   [ORR]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
   [NOR]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
@@ -406,33 +413,47 @@ export class Railyard {
     const idmap = new Map<string, number>();
 
     let id = 0;
-    let context: { [key: number]: unknown } = {};
+    const context: { [key: number]: unknown } = {};
 
-    const impl = (op: OpInfo) => (...args: string[]) => {
+    const cache = (result: unknown, value: string) => {
+      switch (typeof result) {
+        case 'string':
+        case 'number':
+        case 'boolean':
+          return cval(JSON.stringify(result), result);
+        default: {
+          const d = id++;
+          idmap.set(value, d);
+          context[d] = result;
+          return cval(`c[${d}]`, result);
+        }
+      }
+    };
+
+    const impl = (op: OpInfo) => (...args: CTrm[]) => {
       let { fn } = op;
 
       if (typeof fn === 'undefined') {
         missingImpls.add(op.name);
-        return `a[${JSON.stringify(op.name)}](${args.join(',')})`;
+        const arg_list = args.map(({e}) => e).join(',');
+        return cxpr(`a[${JSON.stringify(op.name)}](${arg_list})`);
       }
 
-      const can_eval = args.every(a => a[0] === 'c')
+      const can_eval = args.every(a => a.t === 'v')
 
       if (typeof fn === 'symbol') {
-        if (!can_eval) { return cFns[fn].call(null, context, ...args); }
+        if (!can_eval) { return cFns[fn].call(null, ...args); }
         fn = iFns[fn];
       }
 
       if (can_eval) {
-        const arg_vals = args.map(a => context[a.substring(2, a.length-1) as unknown as number]);
-        const result = fn.apply(null, arg_vals as any);
-        const rid = id++;
-        context[rid] = result;
-        return `c[${rid}]`;
+        const arg_vals = (args as CVal[]).map(({v}) => v);
+        cache(fn.apply(null, arg_vals as any), null as any);
       }
 
+      const arg_list = args.map(({e}) => e).join(',');
       if ((Math as any)[fn.name] === fn) {
-        return `Math.${fn.name}(${args.join(',')})`;
+        return cxpr(`Math.${fn.name}(${arg_list})`);
       }
 
       let fid = idmap.get(op.name);
@@ -442,66 +463,37 @@ export class Railyard {
         context[fid] = fn;
       }
 
-      return `(c[${fid}](${args.join(',')}))`;
+      return cxpr(`c[${fid}](${arg_list})`);
     };
 
-    const val = (value: string) => {
+    const val: (v: string) => CTrm = (value: string) => {
       if (missingVals.has(value)) {
-        return `a[${JSON.stringify(value)}]`;
+        return cxpr(`a[${JSON.stringify(value)}]`);
       }
       
-      if (idmap.has(value)) {
-        return `c[${idmap.get(value) as number}]`;
+      const d = idmap.get(value);
+      if (typeof d === 'number') {
+        return cval(`c[${d}]`, context[d]);
       }
 
       try {
-        const result = wrap(value);
-        const vid = id++;
-        idmap.set(value, vid);
-        context[vid] = result;
-        return `c[${vid}]`;
+        return cache(wrap(value), value);
       } catch(_) {
         missingVals.add(value);
-        return `a[${JSON.stringify(value)}]`;
+        return cxpr(`a[${JSON.stringify(value)}]`);
       }
     };
 
-    let expr = this._interpret<string>(tokens, impl, val);
-
-    // Substitute literal values into the body expression,
-    // and keep track of which values cannot be substituted.
-    const used = new Set<number>();
-    expr = expr.replace(/c\[(\d+)]/g,
-      (m, d) => {
-        const v = context[d];
-        switch (typeof v) {
-          case 'string':
-          case 'number':
-          case 'boolean':
-            return JSON.stringify(v);
-          default:
-            used.add(+d);
-            return m;
-        }
-      }
-    );
-
-    // Release memory for values that don't
-    // need to be kept in the context.
-    if (used.size === 0) {
-      context = null as any;
-    } else for (id--; id >= 0; id--) {
-      if (!used.has(id)) { delete context[id]; }
-    }
+    const expr = this._interpret<CTrm>(tokens, impl, val).e;
 
     let fn: Function;
     const body = `return ${expr};`;
     console.log(body);
     if (missingVals.size + missingImpls.size === 0) {
-      if (context === null) { fn = new Function(body); }
+      if (id === 0) { fn = new Function(body); }
       else { fn = (new Function('c', body)).bind(null, context); }
     } else {
-      if (context === null) { fn = new Function('a', body); }
+      if (id === 0) { fn = new Function('a', body); }
       else { fn = (new Function('c', 'a', body)).bind(null, context); }
     }
 
