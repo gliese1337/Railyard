@@ -1,6 +1,6 @@
 {
   "name": "railyard",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "A generic railyard parser.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

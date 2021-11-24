@@ -20,40 +20,6 @@ export type Intrinsic =
   typeof XOR | typeof XNR | typeof AND | typeof NND | typeof ORR | typeof NOR |
   typeof NEG | typeof INV | typeof NOT;
 
-const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
-  [ADD]: (a: number, b: number) => a + b,
-  [SUB]: (a: number, b: number) => a - b,
-  [MUL]: (a: number, b: number) => a * b,
-  [DIV]: (a: number, b: number) => a / b,
-  [REM]: (a: number, b: number) => a % b,
-  [XOR]: (a: number, b: number) => a ^ b,
-  [XNR]: (a: number, b: number) => ~(a ^ b),
-  [AND]: (a: number, b: number) => a & b,
-  [NND]: (a: number, b: number) => ~(a & b),
-  [ORR]: (a: number, b: number) => a | b,
-  [NOR]: (a: number, b: number) => ~(a | b),
-  [NEG]: (a: number) => -a,
-  [INV]: (a: number) => ~a,
-  [NOT]: (a: number) => !a,
-};
-
-const cFns: { [key in Intrinsic]: (...args: string[]) => string } = {
-  [ADD]: (a: string, b: string) => `(${a}+${b})`,
-  [SUB]: (a: string, b: string) => `(${a}-${b})`,
-  [MUL]: (a: string, b: string) => `(${a}*${b})`,
-  [DIV]: (a: string, b: string) => `(${a}/${b})`,
-  [REM]: (a: string, b: string) => `(${a}%${b})`,
-  [XOR]: (a: string, b: string) => `(${a}^${b})`,
-  [XNR]: (a: string, b: string) => `(~(${a}^${b}))`,
-  [AND]: (a: string, b: string) => `((${a})&(${b}))`,
-  [NND]: (a: string, b: string) => `(~(${a}&${b}))`,
-  [ORR]: (a: string, b: string) => `(${a}|${b})`,
-  [NOR]: (a: string, b: string) => `(~(${a}|${b}))`,
-  [NEG]: (a: string) => `(-${a})`,
-  [INV]: (a: string) => `(~${a})`,
-  [NOT]: (a: string) => `(!${a})`,
-};
-
 export type InfixInfo = {
   type: 'infix'
   name: string,
@@ -104,6 +70,70 @@ export type ResultNode = {
 };
 
 export type AstNode = OpNode | ValNode | ResultNode;
+
+const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
+  [ADD]: (a: number, b: number) => a + b,
+  [SUB]: (a: number, b: number) => a - b,
+  [MUL]: (a: number, b: number) => a * b,
+  [DIV]: (a: number, b: number) => a / b,
+  [REM]: (a: number, b: number) => a % b,
+  [XOR]: (a: number, b: number) => a ^ b,
+  [XNR]: (a: number, b: number) => ~(a ^ b),
+  [AND]: (a: number, b: number) => a & b,
+  [NND]: (a: number, b: number) => ~(a & b),
+  [ORR]: (a: number, b: number) => a | b,
+  [NOR]: (a: number, b: number) => ~(a | b),
+  [NEG]: (a: number) => -a,
+  [INV]: (a: number) => ~a,
+  [NOT]: (a: number) => !a,
+};
+
+function iis(c: { [key: number]: unknown }, e: string, v: unknown) {
+  if (e[0] !== 'c') { return false; }
+  return v === c[e.substring(2, e.length-1) as unknown as number];
+}
+
+const cFns: { [key in Intrinsic]: (c: { [key: number]: unknown }, ...args: string[]) => string } = {
+  [ADD]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? b : iis(c,b,0) ? a : `(${a}+${b})`,
+  [SUB]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? (iis(c,b,0) ? '0' : `(-${b})`) : (iis(c,b,0) ? a : `(${a}-${b})`),
+  [MUL]: (c: { [key: number]: unknown }, a: string, b: string) => (iis(c,a,0) || iis(c,b,0)) ? '0' : iis(c,a,1) ? b : iis(c,b,1) ? a : `(${a}*${b})`,
+  [DIV]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? '0' : iis(c,b,1) ? a : `(${a}/${b})`,
+  [REM]: (_: { [key: number]: unknown }, a: string, b: string) => `(${a}%${b})`,
+  [XOR]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? b : iis(c,b,0) ? a : `(${a}^${b})`,
+  [XNR]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? `(~${b})` : iis(c,b,0) ? `(~${a})` : `(~(${a}^${b}))`,
+  [AND]: (c: { [key: number]: unknown }, a: string, b: string) => (iis(c,a,0) || iis(c,b,0)) ? '0' : `(${a}&${b})`,
+  [NND]: (_: { [key: number]: unknown }, a: string, b: string) => `(~(${a}&${b}))`,
+  [ORR]: (c: { [key: number]: unknown }, a: string, b: string) => iis(c,a,0) ? b : iis(c,b,0) ? a : `(${a}|${b})`,
+  [NOR]: (_: { [key: number]: unknown }, a: string, b: string) => `(~(${a}|${b}))`,
+  [NEG]: (c: { [key: number]: unknown }, a: string) => iis(c,a,0) ? '0' : `(-${a})`,
+  [INV]: (_: { [key: number]: unknown }, a: string) => `(~${a})`,
+  [NOT]: (_: { [key: number]: unknown }, a: string) => `(!${a})`,
+};
+
+function pis(n: AstNode, v: unknown) {
+  if (n.type !== 'result') { return false; }
+  return n.value === v;
+}
+
+const res = (value: unknown) => ({ type: 'result', value } as ResultNode);
+const opr = (op: OpInfo, ...args: AstNode[]) => ({ type: 'operator', value: { op, args } } as OpNode);
+
+const pFns: { [key in Intrinsic]: (op: OpInfo, ...args: AstNode[]) => AstNode } = {
+  [ADD]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
+  [SUB]: (op: OpInfo, a: AstNode, b: AstNode) => pis(b,0) ? a : opr(op,a,b),
+  [MUL]: (op: OpInfo, a: AstNode, b: AstNode) => (pis(a,0) || pis(b,0)) ? res(0) : pis(a,1) ? b : pis(b,1) ? a : opr(op,a,b),
+  [DIV]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? res(0) : pis(b,1) ? a : opr(op,a,b),
+  [REM]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
+  [XOR]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
+  [XNR]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
+  [AND]: (op: OpInfo, a: AstNode, b: AstNode) => (pis(a,0) || pis(b,0)) ? res(0) : opr(op,a,b),
+  [NND]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
+  [ORR]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
+  [NOR]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
+  [NEG]: (op: OpInfo, a: AstNode) => pis(a,0) ? a : opr(op,a),
+  [INV]: (op: OpInfo, a: AstNode) => opr(op,a),
+  [NOT]: (op: OpInfo, a: AstNode) => opr(op,a),
+};
 
 function * handle_op(stack: StackData[], { precedence, associativity }: InfixInfo) {
   if (associativity === 'right') {
@@ -329,18 +359,23 @@ export class Railyard {
     const impl = (op: OpInfo) => (...args: AstNode[]) => {
       let { fn } = op;
 
-      if (typeof fn === 'symbol') { fn = iFns[fn]; }
-
-      if (typeof fn !== 'function') {
-         missingImpls.add(op.name);
-        return { type: "operator", value: { op, args } } as OpNode;
+      if (typeof fn === 'undefined') {
+        missingImpls.add(op.name);
+        return opr(op, ...args);
       }
 
-      if (args.every(({ type }) => type === 'result')) {
+      const can_eval = args.every(({ type }) => type === 'result');
+
+      if (typeof fn === 'symbol') {
+        if (!can_eval) { return pFns[fn](op, ...args); }
+        fn = iFns[fn];
+      }
+
+      if (can_eval) {
         const arg_vals = args.map(a => a.value);
-        return { type: 'result', value: fn.apply(null, arg_vals as any) } as ResultNode;
+        return res(fn.apply(null, arg_vals as any));
       }
-      return { type: "operator", value: { op, args } } as OpNode;
+      return opr(op, ...args);
     };
 
     const val = (value: string) => {
@@ -384,22 +419,8 @@ export class Railyard {
       const can_eval = args.every(a => a[0] === 'c')
 
       if (typeof fn === 'symbol') {
-        if (!can_eval) {
-          const cfn = cFns[fn]; 
-          if (typeof cfn !== 'function') {
-            missingImpls.add(op.name);
-            return `a[${JSON.stringify(op.name)}](${args.join(',')})`;
-          }
-          return cFns[fn].apply(null, args);
-        }
+        if (!can_eval) { return cFns[fn].call(null, context, ...args); }
         fn = iFns[fn];
-      }
-
-      let fid = idmap.get(op.name);
-      if (typeof fid === 'undefined') {
-        fid = id++;
-        idmap.set(op.name, fid);
-        context[fid] = fn;
       }
 
       if (can_eval) {
@@ -408,6 +429,17 @@ export class Railyard {
         const rid = id++;
         context[rid] = result;
         return `c[${rid}]`;
+      }
+
+      if ((Math as any)[fn.name] === fn) {
+        return `Math.${fn.name}(${args.join(',')})`;
+      }
+
+      let fid = idmap.get(op.name);
+      if (typeof fid === 'undefined') {
+        fid = id++;
+        idmap.set(op.name, fid);
+        context[fid] = fn;
       }
 
       return `(c[${fid}](${args.join(',')}))`;
@@ -464,6 +496,7 @@ export class Railyard {
 
     let fn: Function;
     const body = `return ${expr};`;
+    console.log(body);
     if (missingVals.size + missingImpls.size === 0) {
       if (context === null) { fn = new Function(body); }
       else { fn = (new Function('c', body)).bind(null, context); }

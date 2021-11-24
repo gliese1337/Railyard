@@ -83,7 +83,7 @@ const parser = new Railyard()
     .register({ type: 'function', name: 'xor', arity: 2, fn: XOR });
 ```
 
-The use of `Intrinsic`s makes not difference to parsing, interpretation, or partial evaluation, but does improve the performance of compiled expressions, and can be convenient to avoid re-implementing lots of simple functions anyway.
+The use of `Intrinsic`s makes not difference to parsing or interpretation, but does allow more effective partial evaluation and improves the performance of compiled expressions, and can be convenient to avoid re-implementing lots of simple functions anyway.
 
 At this point, you can call
 * `parser.parseToRPN(tokens: Iterable<string>): Generator<Token>` This method returns a version of the input expression converted into de-parenthesized Reverse Polish Notation, with each original string token wrapped up in a `Token` data structure indicating whether it was originally an input value or an operator. The structure of the `Token` data type is `type Token = { type: "value"; value: string; } | { type: "operator"; value: OpInfo; };`

@@ -9,6 +9,7 @@ describe("Test compiler", () => {
     .register({ type: 'infix', name: '/', precedence: 8, associativity: "left", fn: DIV })
     .register({ type: 'infix', name: '+', precedence: 8, associativity: "left", fn: ADD })
     .register({ type: 'infix', name: '-', precedence: 8, associativity: "left", fn: SUB })
+    .register({ type: 'function', name: 'sin', arity: 1, fn: Math.sin })
     .lookup((v) => {
       if (v === 'pi') return Math.PI;
       const n = parseFloat(v);
@@ -56,6 +57,18 @@ describe("Test compiler", () => {
     expect(ops.size).to.eql(0);
     expect(vars.size).to.eql(1);
     expect(fn({ t: Math.PI })).to.eql(2);
+  });
+
+  it("should correctly compile expressions with Math functions", () => {
+    let { fn, free: { ops, vars } } = parser.compile(['sin', 'pi']);
+    expect(ops.size).to.eql(0);
+    expect(vars.size).to.eql(0);
+    expect(fn()).to.be.lessThan(0.000001);
+
+    ({ fn, free: { ops, vars } } = parser.compile(['sin', '(', 'a', '*', 'b', ')']));
+    expect(ops.size).to.eql(0);
+    expect(vars.size).to.eql(2);
+    expect(fn({ a: 1, b: Math.PI })).to.be.lessThan(0.000001);
   });
 
   it("should correctly compile complex expressions", () => {
