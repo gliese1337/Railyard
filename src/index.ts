@@ -71,6 +71,8 @@ export type ResultNode = {
 
 export type AstNode = OpNode | ValNode | ResultNode;
 
+/* Intrinsic Implementations */
+
 const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
   [ADD]: (a: number, b: number) => a + b,
   [SUB]: (a: number, b: number) => a - b,
@@ -88,58 +90,54 @@ const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
   [NOT]: (a: number) => !a,
 };
 
-type CVal = { t: 'v'; e: string; v: unknown; };
-type CXpr = { t: 'x'; e: string; };
-type CTrm = CVal | CXpr;
+/* Compilation Functions */
 
-const cval = (e: string, v: unknown) => ({t:'v',e,v} as CVal);
-const cxpr = (e: string) => ({t:'x',e} as CXpr);
-
-function iis(e: CTrm, v: unknown) {
-  if (e.t === 'x') { return false; }
-  return v === e.v;
-}
-
-const cFns: { [key in Intrinsic]: (...args: CTrm[]) => CTrm } = {
-  [ADD]: (a: CTrm, b: CTrm) => iis(a,0) ? b : iis(b,0) ? a : cxpr(`(${a.e}+${b.e})`),
-  [SUB]: (a: CTrm, b: CTrm) => iis(a,0) ? cxpr(`(-${b.e})`) : iis(b,0) ? a : cxpr(`(${a.e}-${b.e})`),
-  [MUL]: (a: CTrm, b: CTrm) => iis(a,0) ? a : iis(b,0) ? b : iis(a,1) ? b : iis(b,1) ? a : cxpr(`(${a.e}*${b.e})`),
-  [DIV]: (a: CTrm, b: CTrm) => iis(a,0) ? a : iis(b,1) ? a : cxpr(`(${a.e}/${b.e})`),
-  [REM]: (a: CTrm, b: CTrm) => cxpr(`(${a.e}%${b.e})`),
-  [XOR]: (a: CTrm, b: CTrm) => iis(a,0) ? b : iis(b,0) ? a : cxpr(`(${a.e}^${b.e})`),
-  [XNR]: (a: CTrm, b: CTrm) => iis(a,0) ? cxpr(`(~${b.e})`) : iis(b,0) ? cxpr(`(~${a.e})`) : cxpr(`(~(${a.e}^${b.e}))`),
-  [AND]: (a: CTrm, b: CTrm) => iis(a,0) ? a : iis(b,0) ? b : cxpr(`(${a.e}&${b.e})`),
-  [NND]: (a: CTrm, b: CTrm) => cxpr(`(~(${a.e}&${b.e}))`),
-  [ORR]: (a: CTrm, b: CTrm) => iis(a,0) ? b : iis(b,0) ? a : cxpr(`(${a.e}|${b.e})`),
-  [NOR]: (a: CTrm, b: CTrm) => cxpr(`(~(${a.e}|${b.e}))`),
-  [NEG]: (a: CTrm) => iis(a,0) ? a : cxpr(`(-${a.e})`),
-  [INV]: (a: CTrm) => cxpr(`(~${a.e})`),
-  [NOT]: (a: CTrm) => cxpr(`(!${a.e})`),
+const cFns: { [key in Intrinsic]: (...args: string[]) => string } = {
+  [ADD]: (a: string, b: string) => `(${a}+${b})`,
+  [SUB]: (a: string, b: string) => `(${a}-${b})`,
+  [MUL]: (a: string, b: string) => `(${a}*${b})`,
+  [DIV]: (a: string, b: string) => `(${a}/${b})`,
+  [REM]: (a: string, b: string) => `(${a}%${b})`,
+  [XOR]: (a: string, b: string) => `(${a}^${b})`,
+  [XNR]: (a: string, b: string) => `(~(${a}^${b}))`,
+  [AND]: (a: string, b: string) => `(${a}&${b})`,
+  [NND]: (a: string, b: string) => `(~(${a}&${b}))`,
+  [ORR]: (a: string, b: string) => `(${a}|${b})`,
+  [NOR]: (a: string, b: string) => `(~(${a}|${b}))`,
+  [NEG]: (a: string) => `(-${a})`,
+  [INV]: (a: string) => `(~${a})`,
+  [NOT]: (a: string) => `(!${a})`,
 };
 
-function pis(n: AstNode, v: unknown) {
+
+/* Partial Evaluation Functions */
+
+function is(n: AstNode, v: unknown) {
   if (n.type !== 'result') { return false; }
   return n.value === v;
 }
 
 const res = (value: unknown) => ({ type: 'result', value } as ResultNode);
 const opr = (op: OpInfo, ...args: AstNode[]) => ({ type: 'operator', value: { op, args } } as OpNode);
+const negInfo: FnInfo = { type: 'function', name: 'neg', arity: 1, fn: NEG };
 
-const pFns: { [key in Intrinsic]: (op: OpInfo, ...args: AstNode[]) => AstNode } = {
-  [ADD]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
-  [SUB]: (op: OpInfo, a: AstNode, b: AstNode) => pis(b,0) ? a : opr(op,a,b),
-  [MUL]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? a : pis(b,0) ? b : pis(a,1) ? b : pis(b,1) ? a : opr(op,a,b),
-  [DIV]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? res(0) : pis(b,1) ? a : opr(op,a,b),
-  [REM]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
-  [XOR]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
-  [XNR]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
-  [AND]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? a : pis(b,0) ? b : opr(op,a,b),
-  [NND]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
-  [ORR]: (op: OpInfo, a: AstNode, b: AstNode) => pis(a,0) ? b : pis(b,0) ? a : opr(op,a,b),
-  [NOR]: (op: OpInfo, a: AstNode, b: AstNode) => opr(op,a,b),
-  [NEG]: (op: OpInfo, a: AstNode) => pis(a,0) ? a : opr(op,a),
-  [INV]: (op: OpInfo, a: AstNode) => opr(op,a),
-  [NOT]: (op: OpInfo, a: AstNode) => opr(op,a),
+// At least one argument will always be unevaluable
+const pFns: { [key in Intrinsic]: (op: OpNode, ...args: AstNode[]) => AstNode } = {
+  [ADD]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
+  [SUB]: (op: OpNode, a: AstNode, b: AstNode) => is(b,0) ? a : is(a,0) ? (b.type === 'result' ? res(-(b.value as any)) : opr(negInfo, b)) : op,
+  [MUL]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? a : is(b,0) ? b : is(a,1) ? b : is(b,1) ? a : op,
+  [DIV]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? res(0) : is(b,1) ? a : op,
+  [REM]: (op: OpNode,_a: AstNode,_b: AstNode) => op,
+  [XOR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
+  [XNR]: (op: OpNode,_a: AstNode,_b: AstNode) => op,
+  [AND]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? a : is(b,0) ? b : op,
+  [NND]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? res(~0) : is(b,0) ? res(~0) : op,
+  [ORR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
+  [NOR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,~0) ? res(0) : is(b,~0) ? res(0) : op,
+  // These only have one argument, so we can't do anything
+  [NEG]: (op: OpNode,_a: AstNode) => op,
+  [INV]: (op: OpNode,_a: AstNode) => op,
+  [NOT]: (op: OpNode,_a: AstNode) => op,
 };
 
 function * handle_op(stack: StackData[], { precedence, associativity }: InfixInfo) {
@@ -359,137 +357,139 @@ export class Railyard {
     return this._interpret<unknown>(tokens, extract_impl, this.wrap);
   }
 
-  public partial(tokens: Iterable<string>){
+  private _partial(tokens: Iterable<string>){
     const { wrap } = this;
-    const missingImpls = new Set<string>();
-    const missingVals = new Set<string>();
-    const impl = (op: OpInfo) => (...args: AstNode[]) => {
-      let { fn } = op;
+    const ast = this.parseToAST(tokens);
 
-      if (typeof fn === 'undefined') {
-        missingImpls.add(op.name);
-        return opr(op, ...args);
-      }
+    const mvals = new Set<string>();
+    const eval_node: (n: AstNode) => AstNode = (node) => {
+      switch (node.type) {
+        case 'result': return node;
+        case 'value': {
+          if (mvals.has(node.value)) { return node; }
+          try { return res(wrap(node.value)); }
+          catch (_) { mvals.add(node.value); }
+          return node;
+        }
+        case 'operator': {
+          const { value } = node;
+          const { op, args: params } = value;
 
-      const can_eval = args.every(({ type }) => type === 'result');
+          // Replace original arguments with
+          // partially-evaluated arguments.
+          const args = params.map(eval_node);
+          value.args = args;
 
-      if (typeof fn === 'symbol') {
-        if (!can_eval) { return pFns[fn](op, ...args); }
-        fn = iFns[fn];
-      }
+          let { fn } = op;
 
-      if (can_eval) {
-        const arg_vals = args.map(a => a.value);
-        return res(fn.apply(null, arg_vals as any));
-      }
-      return opr(op, ...args);
-    };
+          // Unimplemented operations
+          if (typeof fn === 'undefined') { return node; }
 
-    const val = (value: string) => {
-      if (missingVals.has(value)) {
-        return { type: "value", value } as ValNode;
-      }
-      try {
-        return { type: 'result', value: wrap(value) } as ResultNode;
-      } catch(_) {
-        missingVals.add(value);
-        return { type: "value", value } as ValNode;
-      }
-    };
-
-    return {
-      ast: this._interpret<AstNode>(tokens, impl, val),
-      free: {
-        ops: missingImpls,
-        vars: missingVals,
-      }
-    };
-  }
-
-  public compile(tokens: Iterable<string>){
-    const { wrap } = this;
-    const missingImpls = new Set<string>();
-    const missingVals = new Set<string>();
-    const idmap = new Map<string, number>();
-
-    let id = 0;
-    const context: { [key: number]: unknown } = {};
-
-    const cache = (result: unknown, value: string) => {
-      switch (typeof result) {
-        case 'string':
-        case 'number':
-        case 'boolean':
-          return cval(JSON.stringify(result), result);
-        default: {
-          const d = id++;
-          idmap.set(value, d);
-          context[d] = result;
-          return cval(`c[${d}]`, result);
+          // If all arguments are fully evaluated and we have
+          // an op implementation, we can continue evaluation.
+          const can_eval = args.every(a => a.type === 'result');
+    
+          // Handle intrinsics
+          if (typeof fn === 'symbol') {
+            // If we can't evaluate, try identity transformations
+            if (!can_eval) { return pFns[fn](node, ...args); }
+            // Otherwise, get the actual implementation
+            fn = iFns[fn];
+          }
+    
+          if (can_eval) {
+            const arg_vals = args.map(a => a.value);
+            return res(fn.apply(null, arg_vals as any));
+          }
+          return node;
         }
       }
     };
 
-    const impl = (op: OpInfo) => (...args: CTrm[]) => {
-      let { fn } = op;
+    return eval_node(ast);
+  }
 
-      if (typeof fn === 'undefined') {
-        missingImpls.add(op.name);
-        const arg_list = args.map(({e}) => e).join(',');
-        return cxpr(`a[${JSON.stringify(op.name)}](${arg_list})`);
+  public partial(tokens: Iterable<string>){
+    const ast = this._partial(tokens);
+    const ops = new Set<string>();
+    const vars = new Set<string>();
+
+    (function walk(node: AstNode) {
+      switch (node.type) {
+        case 'value':
+          vars.add(node.value);
+          break;
+        case 'operator': {
+          const { op, args } = node.value;
+          args.forEach(walk);
+          if (typeof op.fn === 'undefined') {
+            ops.add(op.name);
+          }
+        }
       }
+    })(ast);
+    
+    return { ast, free: { ops, vars } };
+  }
 
-      const can_eval = args.every(a => a.t === 'v')
+  public compile(tokens: Iterable<string>){
+    const { ast, free } = this.partial(tokens);
+    if (ast.type === 'result') {
+      const { value } = ast;
+      return { fn: () => value, free };
+    }
 
-      if (typeof fn === 'symbol') {
-        if (!can_eval) { return cFns[fn].call(null, ...args); }
-        fn = iFns[fn];
+    let id = 0;
+    const context: unknown[] = [];
+
+    const encodings = new Map<unknown, string>();
+    const cache = (value: unknown) => {
+      let code = encodings.get(value);
+      if (typeof code !== 'undefined') { return code; }
+      switch (typeof value) {
+        case 'string':
+        case 'number':
+        case 'boolean': {
+          code = JSON.stringify(value);
+          break;
+        }
+        default: {
+          const d = id++;
+          context[d] = value;
+          code = `c[${d}]`
+          break;
+        }
       }
-
-      if (can_eval) {
-        const arg_vals = (args as CVal[]).map(({v}) => v);
-        cache(fn.apply(null, arg_vals as any), null as any);
-      }
-
-      const arg_list = args.map(({e}) => e).join(',');
-      if ((Math as any)[fn.name] === fn) {
-        return cxpr(`Math.${fn.name}(${arg_list})`);
-      }
-
-      let fid = idmap.get(op.name);
-      if (typeof fid === 'undefined') {
-        fid = id++;
-        idmap.set(op.name, fid);
-        context[fid] = fn;
-      }
-
-      return cxpr(`c[${fid}](${arg_list})`);
+      encodings.set(value, code);
+      return code;
     };
 
-    const val: (v: string) => CTrm = (value: string) => {
-      if (missingVals.has(value)) {
-        return cxpr(`a[${JSON.stringify(value)}]`);
-      }
-      
-      const d = idmap.get(value);
-      if (typeof d === 'number') {
-        return cval(`c[${d}]`, context[d]);
-      }
+    const walk: (n: AstNode) => string = (node) => {
+      switch (node.type) {
+        case 'result': return cache(node.value);
+        case 'value': return `a[${JSON.stringify(node.value)}]`;
+        case 'operator': {
+          const { value: { op: { fn, name }, args } } = node;
+          const arg_list = args.map(walk);
 
-      try {
-        return cache(wrap(value), value);
-      } catch(_) {
-        missingVals.add(value);
-        return cxpr(`a[${JSON.stringify(value)}]`);
+          // External functions
+          if (typeof fn === 'undefined') { return `a[${JSON.stringify(name)}](${arg_list.join(',')})`; }
+
+          // Intrinsic functions
+          if (typeof fn === 'symbol') { return cFns[fn].call(null, ...arg_list); }
+          
+          // Math functions
+          if ((Math as any)[fn.name] === fn) { return `Math.${fn.name}(${arg_list.join(',')})`; }
+
+          // Context functions
+          return `${cache(fn)}(${arg_list})`;
+        }
       }
     };
-
-    const expr = this._interpret<CTrm>(tokens, impl, val).e;
 
     let fn: Function;
-    const body = `return ${expr};`;
-    console.log(body);
-    if (missingVals.size + missingImpls.size === 0) {
+    const body = `return ${walk(ast)};`;
+    if (free.ops.size + free.vars.size === 0) {
       if (id === 0) { fn = new Function(body); }
       else { fn = (new Function('c', body)).bind(null, context); }
     } else {
@@ -497,12 +497,6 @@ export class Railyard {
       else { fn = (new Function('c', 'a', body)).bind(null, context); }
     }
 
-    return {
-      fn,
-      free: {
-        ops: missingImpls,
-        vars: missingVals,
-      }
-    };
+    return { fn, free };
   }
 }
