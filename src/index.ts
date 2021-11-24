@@ -340,16 +340,16 @@ export class Railyard {
   public parseToAST(tokens: Iterable<string>){
     return this._interpret<AstNode>(
       tokens,
-      (op) => (...args: AstNode[]) => ({ type: "operator", value: { op, args } }),
-      (value: string) => ({ type: "value", value }),
+      (op) => (...args) => ({ type: "operator", value: { op, args } }),
+      value => ({ type: "value", value }),
     );
   }
 
   public parseToSExpr(tokens: Iterable<string>){
     return this._interpret<string>(
       tokens,
-      (op) => (...args: string[]) => `(${op.name} ${args.join(' ') })`,
-      (value: string) => value,
+      (op) => (...args) => `(${op.name} ${args.join(' ') })`,
+      value => value,
     );
   }
 
@@ -385,23 +385,16 @@ export class Railyard {
           // Unimplemented operations
           if (typeof fn === 'undefined') { return node; }
 
-          // If all arguments are fully evaluated and we have
-          // an op implementation, we can continue evaluation.
-          const can_eval = args.every(a => a.type === 'result');
-    
-          // Handle intrinsics
-          if (typeof fn === 'symbol') {
-            // If we can't evaluate, try identity transformations
-            if (!can_eval) { return pFns[fn](node, ...args); }
-            // Otherwise, get the actual implementation
-            fn = iFns[fn];
-          }
-    
-          if (can_eval) {
+          // If all arguments are fully evaluated,
+          // we can continue evaluation.
+          if (args.every(a => a.type === 'result')) {
             const arg_vals = args.map(a => a.value);
+            if (typeof fn === 'symbol') { fn = iFns[fn]; }
             return res(fn.apply(null, arg_vals as any));
           }
-          return node;
+
+          // If we can't evaluate, try identity transformations
+          return (typeof fn === 'symbol') ? pFns[fn](node, ...args) : node;
         }
       }
     };
