@@ -46,13 +46,13 @@ function * match_paren(stack: StackData[], error: string) {
   }
 }
 
-function extract_impl(op: OpInfo) {
-  if (typeof op.fn === 'symbol') { return iFns[op.fn]; }
+function registered_impl(op: OpInfo, ...args: unknown[]): unknown {
+  if (typeof op.fn === 'symbol') { return iFns[op.fn](...args); }
   if (typeof op.fn !== 'function') {
     throw new Error(`No implementation for operator ${ op.name }`);
   }
   
-  return op.fn;
+  return (op.fn as any)(...args);
 }
 
 const identity: <T>(_: T) => T = _ => _;
@@ -182,17 +182,27 @@ export class Railyard {
   }
 
   public parseToAST(tokens: Iterable<string>){
-    const impl = (op: OpInfo) => (...args: AstNode[]) => opr(op, ...args);
+    const impl = (op: OpInfo, ...args: AstNode[]) => opr(op, ...args);
     return interpret<AstNode>(this.parseToRPN(tokens), impl, val);
   }
 
   public parseToSExpr(tokens: Iterable<string>){
-    const impl = (op: OpInfo) => (...args: string[]) => `(${op.name} ${args.join(' ') })`;
+    const impl = (op: OpInfo, ...args: string[]) => `(${op.name} ${args.join(' ') })`;
     return interpret<string>(this.parseToRPN(tokens), impl, identity);
   }
 
-  public interpret(tokens: Iterable<string>){
-    return interpret<unknown>(this.parseToRPN(tokens), extract_impl, this.wrap);
+  public interpret(tokens: Iterable<string>): unknown;
+  public interpret<T>(
+    tokens: Iterable<string>,
+    op_impl: (op: OpInfo, ...args: T[]) => T,
+    val_impl: (v: string) => T,
+  ): T;
+  public interpret(
+    tokens: Iterable<string>,
+    op_impl = registered_impl,
+    val_impl = this.wrap,
+  ){
+    return interpret(this.parseToRPN(tokens), op_impl, val_impl);
   }
 
   public compile(tokens: Iterable<string>){

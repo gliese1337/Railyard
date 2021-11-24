@@ -1,6 +1,6 @@
 import { OpInfo, Token } from "./types";
 
-export function interpret<T>(tokens: Iterable<Token>, impl: (op: OpInfo) => (...args: T[]) => T, wrap: (a: string) => T) {
+export function interpret<T>(tokens: Iterable<Token>, impl: (op: OpInfo, ...args: T[]) => T, wrap: (a: string) => T) {
   const vstack: T[] = [];
   for(const token of tokens){
     if(token.type === "operator"){
@@ -11,7 +11,7 @@ export function interpret<T>(tokens: Iterable<Token>, impl: (op: OpInfo) => (...
       }
       const args = vstack.slice(vstack.length-arity);
       vstack.length -= arity;
-      vstack.push(impl(opInfo)(...args));
+      vstack.push(impl(opInfo, ...args));
     } else {
       vstack.push(wrap(token.value));
     }

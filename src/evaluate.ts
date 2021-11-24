@@ -17,7 +17,7 @@ export function partial(tokens: Iterable<Token>, wrap: (x: string) => unknown) {
     return node;
   };
 
-  const impl = (op: OpInfo) => (...args: AstNode[]) => {
+  const partial_impl = (op: OpInfo, ...args: AstNode[]) => {
     let { fn } = op;
 
     const node =  opr(op, ...args);
@@ -37,5 +37,5 @@ export function partial(tokens: Iterable<Token>, wrap: (x: string) => unknown) {
     return (typeof fn === 'symbol') ? pFns[fn](node, ...args) : node;
   };
   
-  return interpret<AstNode>(tokens, impl, val2node);
+  return interpret<AstNode>(tokens, partial_impl, val2node);
 }
