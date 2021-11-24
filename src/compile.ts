@@ -1,7 +1,11 @@
 import { cFns } from "./intrinsics";
 import { AstNode } from "./types";
 
-export function compile(ast: AstNode, free: { ops: Set<string>; vars: Set<string> }){
+export function compile(ast: AstNode){
+  const ops = new Set<string>();
+  const vars = new Set<string>();
+  const free = { ops, vars };
+
   if (ast.type === 'result') {
     const { value } = ast;
     return { fn: () => value, free };
@@ -35,13 +39,19 @@ export function compile(ast: AstNode, free: { ops: Set<string>; vars: Set<string
   const walk: (n: AstNode) => string = (node) => {
     switch (node.type) {
       case 'result': return cache(node.value);
-      case 'value': return `a[${JSON.stringify(node.value)}]`;
+      case 'value': {
+        vars.add(node.value);
+        return `a[${JSON.stringify(node.value)}]`;
+      }
       case 'operator': {
         const { value: { op: { fn, name }, args } } = node;
         const arg_list = args.map(walk);
 
         // External functions
-        if (typeof fn === 'undefined') { return `a[${JSON.stringify(name)}](${arg_list.join(',')})`; }
+        if (typeof fn === 'undefined') {
+          ops.add(name);
+          return `a[${JSON.stringify(name)}](${arg_list.join(',')})`;
+        }
 
         // Intrinsic functions
         if (typeof fn === 'symbol') { return cFns[fn].call(null, ...arg_list); }
@@ -57,7 +67,7 @@ export function compile(ast: AstNode, free: { ops: Set<string>; vars: Set<string
 
   let fn: Function;
   const body = `return ${walk(ast)};`;
-  if (free.ops.size + free.vars.size === 0) {
+  if (ops.size + vars.size === 0) {
     if (id === 0) { fn = new Function(body); }
     else { fn = (new Function('c', body)).bind(null, context); }
   } else {

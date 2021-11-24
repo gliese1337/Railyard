@@ -12,7 +12,7 @@ JavaScript:
 const {
   Railyard,
   ADD, SUB, MUL, DIV, REM,
-  XOR, XNR, AND, NND, ORR, NOR
+  XOR, XNR, AND, NND, ORR, NOR,
   NEG, INV, NOT,
 } = require('railyard');
 ```
@@ -21,12 +21,12 @@ TypeScript:
 ```ts
 import {
   Railyard,
-  OpNode, ValNode, ResultNode, AstNode,
-  ValToken, OpToken, Token,
-  InfixInfo, FnInfo, OpInfo,
   ADD, SUB, MUL, DIV, REM,
-  XOR, XNR, AND, NND, ORR, NOR
+  XOR, XNR, AND, NND, ORR, NOR,
   NEG, INV, NOT, Intrinsic,
+  FnInfo, InfixInfo, OpInfo,
+  OpNode, ValNode, ResultNode, AstNode,
+  OpToken, ValToken, Token,
 } from 'railyard';`
 ```
 
