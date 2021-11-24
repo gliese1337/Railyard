@@ -196,11 +196,11 @@ export class Railyard {
   }
 
   public compile(tokens: Iterable<string>){
-    return compile(partial(this.parseToAST(tokens), this.wrap));
+    return compile(partial(this.parseToRPN(tokens), this.wrap));
   }
 
   public partial(tokens: Iterable<string>){
-    const ast = partial(this.parseToAST(tokens), this.wrap);
+    const ast = partial(this.parseToRPN(tokens), this.wrap);
     const ops = new Set<string>();
     const vars = new Set<string>();
 
