@@ -1,144 +1,27 @@
-export const ADD: unique symbol = Symbol();
-export const SUB: unique symbol = Symbol();
-export const MUL: unique symbol = Symbol();
-export const DIV: unique symbol = Symbol();
-export const REM: unique symbol = Symbol();
+import { compile } from "./compile";
+import { partial } from "./evaluate";
+import { interpret } from "./interpret";
+import { iFns } from "./intrinsics";
+import {
+  ADD, SUB, MUL, DIV, REM,
+  XOR, XNR, AND, NND, ORR, NOR,
+  NEG, INV, NOT, Intrinsic,
+  FnInfo, InfixInfo, OpInfo,
+  OpNode, ValNode, ResultNode, AstNode,
+  OpToken, ValToken, Token,
+  val, opr,
+} from "./types";
 
-export const XOR: unique symbol = Symbol();
-export const XNR: unique symbol = Symbol();
-export const AND: unique symbol = Symbol();
-export const NND: unique symbol = Symbol();
-export const ORR: unique symbol = Symbol();
-export const NOR: unique symbol = Symbol();
-
-export const NEG: unique symbol = Symbol();
-export const INV: unique symbol = Symbol();
-export const NOT: unique symbol = Symbol();
-
-export type Intrinsic =
-  typeof ADD | typeof SUB | typeof MUL | typeof DIV | typeof REM |
-  typeof XOR | typeof XNR | typeof AND | typeof NND | typeof ORR | typeof NOR |
-  typeof NEG | typeof INV | typeof NOT;
-
-export type InfixInfo = {
-  type: 'infix'
-  name: string,
-  precedence: number;
-  associativity: "left" | "right";
-  fn?: Intrinsic | ((a: any, b: any) => unknown);
+export { 
+  ADD, SUB, MUL, DIV, REM,
+  XOR, XNR, AND, NND, ORR, NOR,
+  NEG, INV, NOT, Intrinsic,
+  FnInfo, InfixInfo, OpInfo,
+  OpNode, ValNode, ResultNode, AstNode,
+  OpToken, ValToken, Token,
 };
-
-export type FnInfo = {
-  type: 'function'
-  name: string,
-  arity: number;
-  fn?: Intrinsic | ((...args: any[]) => unknown);
-};
-
-export type OpInfo = InfixInfo | FnInfo;
 
 type StackData = '(' | ',' | ')' | OpInfo;
-
-export type ValToken = {
-  type: "value";
-  value: string;
-};
-
-export type OpToken = {
-  type: "operator";
-  value: OpInfo;
-};
-
-export type Token = ValToken | OpToken;
-
-export type OpNode = {
-  type: "operator";
-  value: {
-    op: OpInfo;
-    args: AstNode[];
-  }
-};
-
-export type ValNode = {
-  type: "value";
-  value: string;
-};
-
-export type ResultNode = {
-  type: "result";
-  value: unknown;
-};
-
-export type AstNode = OpNode | ValNode | ResultNode;
-
-/* Intrinsic Implementations */
-
-const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
-  [ADD]: (a: number, b: number) => a + b,
-  [SUB]: (a: number, b: number) => a - b,
-  [MUL]: (a: number, b: number) => a * b,
-  [DIV]: (a: number, b: number) => a / b,
-  [REM]: (a: number, b: number) => a % b,
-  [XOR]: (a: number, b: number) => a ^ b,
-  [XNR]: (a: number, b: number) => ~(a ^ b),
-  [AND]: (a: number, b: number) => a & b,
-  [NND]: (a: number, b: number) => ~(a & b),
-  [ORR]: (a: number, b: number) => a | b,
-  [NOR]: (a: number, b: number) => ~(a | b),
-  [NEG]: (a: number) => -a,
-  [INV]: (a: number) => ~a,
-  [NOT]: (a: number) => !a,
-};
-
-/* Compilation Functions */
-
-const cFns: { [key in Intrinsic]: (...args: string[]) => string } = {
-  [ADD]: (a: string, b: string) => `(${a}+${b})`,
-  [SUB]: (a: string, b: string) => `(${a}-${b})`,
-  [MUL]: (a: string, b: string) => `(${a}*${b})`,
-  [DIV]: (a: string, b: string) => `(${a}/${b})`,
-  [REM]: (a: string, b: string) => `(${a}%${b})`,
-  [XOR]: (a: string, b: string) => `(${a}^${b})`,
-  [XNR]: (a: string, b: string) => `(~(${a}^${b}))`,
-  [AND]: (a: string, b: string) => `(${a}&${b})`,
-  [NND]: (a: string, b: string) => `(~(${a}&${b}))`,
-  [ORR]: (a: string, b: string) => `(${a}|${b})`,
-  [NOR]: (a: string, b: string) => `(~(${a}|${b}))`,
-  [NEG]: (a: string) => `(-${a})`,
-  [INV]: (a: string) => `(~${a})`,
-  [NOT]: (a: string) => `(!${a})`,
-};
-
-
-/* Partial Evaluation Functions */
-
-function is(n: AstNode, v: unknown) {
-  if (n.type !== 'result') { return false; }
-  return n.value === v;
-}
-
-const res = (value: unknown) => ({ type: 'result', value } as ResultNode);
-const opr = (op: OpInfo, ...args: AstNode[]) => ({ type: 'operator', value: { op, args } } as OpNode);
-const negInfo: FnInfo = { type: 'function', name: 'neg', arity: 1, fn: NEG };
-
-// At least one argument will always be unevaluable
-const pFns: { [key in Intrinsic]: (op: OpNode, ...args: AstNode[]) => AstNode } = {
-  [ADD]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
-  [SUB]: (op: OpNode, a: AstNode, b: AstNode) => is(b,0) ? a : is(a,0) ? (b.type === 'result' ? res(-(b.value as any)) : opr(negInfo, b)) : op,
-  [MUL]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? a : is(b,0) ? b : is(a,1) ? b : is(b,1) ? a : op,
-  [DIV]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? res(0) : is(b,1) ? a : op,
-  [REM]: (op: OpNode,_a: AstNode,_b: AstNode) => op,
-  [XOR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
-  [XNR]: (op: OpNode,_a: AstNode,_b: AstNode) => op,
-  [AND]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? a : is(b,0) ? b : op,
-  [NND]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? res(~0) : is(b,0) ? res(~0) : op,
-  [ORR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
-  [NOR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,~0) ? res(0) : is(b,~0) ? res(0) : op,
-  // These only have one argument, so we can't do anything
-  [NEG]: (op: OpNode,_a: AstNode) => op,
-  [INV]: (op: OpNode,_a: AstNode) => op,
-  [NOT]: (op: OpNode,_a: AstNode) => op,
-};
 
 function * handle_op(stack: StackData[], { precedence, associativity }: InfixInfo) {
   if (associativity === 'right') {
@@ -185,10 +68,12 @@ function extract_impl(op: OpInfo) {
   return op.fn;
 }
 
+const identity: <T>(_: T) => T = _ => _;
+
 export class Railyard {
   private operators: Map<string, InfixInfo> = new Map();
   private functions: Map<string, FnInfo> = new Map();
-  private wrap: (x: string)=> unknown = x => parseFloat(x);
+  private wrap: (x: string) => unknown = x => parseFloat(x);
   private implicitOp: string | null = null;
   private unaryAsPrefix: boolean = true;
 
@@ -309,101 +194,22 @@ export class Railyard {
     }
   }
 
-  private _interpret<T>(tokens: Iterable<string>, impl: (op: OpInfo) => (...args: T[]) => T, wrap: (a: string) => T) {
-    const vstack: T[] = [];
-    for(const token of this.parseToRPN(tokens)){
-      if(token.type === "operator"){
-        const opInfo = token.value;
-        const arity = opInfo.type === 'infix' ? 2 : opInfo.arity;
-        if(vstack.length < arity){
-          throw new Error("Missing Values");
-        }
-        const args = vstack.slice(vstack.length-arity);
-        vstack.length -= arity;
-        vstack.push(impl(opInfo)(...args));
-      } else {
-        vstack.push(wrap(token.value));
-      }
-    }
-
-    if(vstack.length === 0){
-      throw new Error("Empty Formula");
-    }
-
-    if(vstack.length > 1){
-      throw new Error("Missing Operators");
-    }
-
-    return vstack[0];
-  }
-
   public parseToAST(tokens: Iterable<string>){
-    return this._interpret<AstNode>(
-      tokens,
-      (op) => (...args) => ({ type: "operator", value: { op, args } }),
-      value => ({ type: "value", value }),
-    );
+    const impl = (op: OpInfo) => (...args: AstNode[]) => opr(op, ...args);
+    return interpret<AstNode>(this.parseToRPN(tokens), impl, val);
   }
 
   public parseToSExpr(tokens: Iterable<string>){
-    return this._interpret<string>(
-      tokens,
-      (op) => (...args) => `(${op.name} ${args.join(' ') })`,
-      value => value,
-    );
+    const impl = (op: OpInfo) => (...args: string[]) => `(${op.name} ${args.join(' ') })`;
+    return interpret<string>(this.parseToRPN(tokens), impl, identity);
   }
 
   public interpret(tokens: Iterable<string>){
-    return this._interpret<unknown>(tokens, extract_impl, this.wrap);
-  }
-
-  private _partial(tokens: Iterable<string>){
-    const { wrap } = this;
-    const ast = this.parseToAST(tokens);
-
-    const mvals = new Set<string>();
-    const eval_node: (n: AstNode) => AstNode = (node) => {
-      switch (node.type) {
-        case 'result': return node;
-        case 'value': {
-          if (mvals.has(node.value)) { return node; }
-          try { return res(wrap(node.value)); }
-          catch (_) { mvals.add(node.value); }
-          return node;
-        }
-        case 'operator': {
-          const { value } = node;
-          const { op, args: params } = value;
-
-          // Replace original arguments with
-          // partially-evaluated arguments.
-          const args = params.map(eval_node);
-          value.args = args;
-
-          let { fn } = op;
-
-          // Unimplemented operations
-          if (typeof fn === 'undefined') { return node; }
-
-          // If all arguments are fully evaluated,
-          // we can continue evaluation.
-          if (args.every(a => a.type === 'result')) {
-            const arg_vals = args.map(a => a.value);
-            if (typeof fn === 'symbol') { fn = iFns[fn]; }
-            return res(fn.apply(null, arg_vals as any));
-          }
-
-          // If we can't evaluate, try identity transformations
-          return (typeof fn === 'symbol') ? pFns[fn](node, ...args) : node;
-        }
-      }
-    };
-
-    return eval_node(ast);
+    return interpret<unknown>(this.parseToRPN(tokens), extract_impl, this.wrap);
   }
 
   public partial(tokens: Iterable<string>){
-    const ast = this._partial(tokens);
+    const ast = partial(this.parseToAST(tokens), this.wrap);
     const ops = new Set<string>();
     const vars = new Set<string>();
 
@@ -427,69 +233,6 @@ export class Railyard {
 
   public compile(tokens: Iterable<string>){
     const { ast, free } = this.partial(tokens);
-    if (ast.type === 'result') {
-      const { value } = ast;
-      return { fn: () => value, free };
-    }
-
-    let id = 0;
-    const context: unknown[] = [];
-
-    const encodings = new Map<unknown, string>();
-    const cache = (value: unknown) => {
-      let code = encodings.get(value);
-      if (typeof code !== 'undefined') { return code; }
-      switch (typeof value) {
-        case 'string':
-        case 'number':
-        case 'boolean': {
-          code = JSON.stringify(value);
-          break;
-        }
-        default: {
-          const d = id++;
-          context[d] = value;
-          code = `c[${d}]`
-          break;
-        }
-      }
-      encodings.set(value, code);
-      return code;
-    };
-
-    const walk: (n: AstNode) => string = (node) => {
-      switch (node.type) {
-        case 'result': return cache(node.value);
-        case 'value': return `a[${JSON.stringify(node.value)}]`;
-        case 'operator': {
-          const { value: { op: { fn, name }, args } } = node;
-          const arg_list = args.map(walk);
-
-          // External functions
-          if (typeof fn === 'undefined') { return `a[${JSON.stringify(name)}](${arg_list.join(',')})`; }
-
-          // Intrinsic functions
-          if (typeof fn === 'symbol') { return cFns[fn].call(null, ...arg_list); }
-          
-          // Math functions
-          if ((Math as any)[fn.name] === fn) { return `Math.${fn.name}(${arg_list.join(',')})`; }
-
-          // Context functions
-          return `${cache(fn)}(${arg_list})`;
-        }
-      }
-    };
-
-    let fn: Function;
-    const body = `return ${walk(ast)};`;
-    if (free.ops.size + free.vars.size === 0) {
-      if (id === 0) { fn = new Function(body); }
-      else { fn = (new Function('c', body)).bind(null, context); }
-    } else {
-      if (id === 0) { fn = new Function('a', body); }
-      else { fn = (new Function('c', 'a', body)).bind(null, context); }
-    }
-
-    return { fn, free };
+    return compile(ast, free);
   }
 }
