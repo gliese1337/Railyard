@@ -37,5 +37,5 @@ export function partial(tokens: Iterable<Token>, wrap: (x: string) => unknown) {
     return (typeof fn === 'symbol') ? pFns[fn](node, ...args) : node;
   };
   
-  return interpret<AstNode>(tokens, partial_impl, val2node);
+  return interpret<AstNode>(tokens, val2node, partial_impl);
 }

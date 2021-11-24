@@ -183,26 +183,26 @@ export class Railyard {
 
   public parseToAST(tokens: Iterable<string>){
     const impl = (op: OpInfo, ...args: AstNode[]) => opr(op, ...args);
-    return interpret<AstNode>(this.parseToRPN(tokens), impl, val);
+    return interpret<AstNode>(this.parseToRPN(tokens), val, impl);
   }
 
   public parseToSExpr(tokens: Iterable<string>){
     const impl = (op: OpInfo, ...args: string[]) => `(${op.name} ${args.join(' ') })`;
-    return interpret<string>(this.parseToRPN(tokens), impl, identity);
+    return interpret<string>(this.parseToRPN(tokens), identity, impl);
   }
 
   public interpret(tokens: Iterable<string>): unknown;
   public interpret<T>(
     tokens: Iterable<string>,
-    op_impl: (op: OpInfo, ...args: T[]) => T,
     val_impl: (v: string) => T,
+    op_impl: (op: OpInfo, ...args: T[]) => T,
   ): T;
   public interpret(
     tokens: Iterable<string>,
-    op_impl = registered_impl,
     val_impl = this.wrap,
+    op_impl = registered_impl,
   ){
-    return interpret(this.parseToRPN(tokens), op_impl, val_impl);
+    return interpret(this.parseToRPN(tokens), val_impl, op_impl);
   }
 
   public compile(tokens: Iterable<string>){

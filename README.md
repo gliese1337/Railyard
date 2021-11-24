@@ -96,7 +96,7 @@ Example:
 
 If you have provided implementations for *all* operators used in a particular expression, then you can use
 
-* `parser.interpret(tokens: Iterable<string>): unknown` This method will attempt to apply your operator definitions to the appropriate arguments to produce a value. By default, everything token that is not recognized as a registered operator name is treated as an input value, and by default all inputs are interpreted as decimal floating-point numbers with JavaScript's built-in `parseFloat` function.
+* `parser.interpret(tokens: Iterable<string>): unknown` This method will attempt to apply your operator definitions to the appropriate arguments to produce a value. By default, every token that is not recognized as a registered operator name is treated as an input value, and by default all inputs are interpreted as decimal floating-point numbers with JavaScript's built-in `parseFloat` function.
 
 `parser.interpret(['3', '*', '(', '2', '+', '1', ')']) === 9`
 
@@ -118,10 +118,18 @@ parser.interpret('2 ^ 2 ^ 3 b ( a + 3 )'.split(' ')) === 7680
 
 If you do not have complete operator implementations, you can still use the `partial` and `compile` methods:
 
-* `parser.partial(tokens: Iterable<string>): { ast: AstNode; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns the resulting minimized AST, along with sets of the names of unimplemented methods and missing values that would be needed to complete evaluation. Thhe structure of the `ASTNode` data type is augmented in this case as follows: `type AstNode = { type: "operator"; value: { op: OpInfo; args: AstNode[]; }; } | { type: "result"; value: string; };`, in which a `ResultNode` indicates a final value, which should not be evaluated any further.
+* `parser.partial(tokens: Iterable<string>): { ast: AstNode; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns the resulting minimized AST, along with sets of the names of unimplemented methods and missing values that would be needed to complete evaluation. The structure of the `ASTNode` data type is augmented in this case as follows: `type AstNode = { type: "operator"; value: { op: OpInfo; args: AstNode[]; }; } | { type: "result"; value: string; };`, in which a `ResultNode` indicates a final value, which should not be evaluated any further.
 * `parser.compile(tokens: Iterable<string>): { fn: Function; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns a compiled JavaScript function which can complete evaluation of the expression when given the necessary missing values, along with the names of unimplemented methods and missing values that it needs. To run the returned function, pass in an object whose keys are the missing operator and value names.
 
 The `partial` and `compile` methods depend on a `lookup` function having been set which will throw an exception for missing values. Otherwise, whatever you feel like returning will be treated as a perfectly respectable value and passed on to later stages of evaluation, without recording any missing inputs.
+
+Compilation takes longer than direct interpretation, but if you need to evaluate an expression multiple times with different values plugged in (e.g., for graphing user-provided functions), it can be well worth it!
+
+For a greater level of detailed control over the evaluation process, you can also use the second overload of the `interpret` method:
+
+* `interpret<T>(tokens: Iterable<string>, val_impl: (v: string) => T, op_impl: (op: OpInfo, ...args: T[]) => T): T;`
+
+which takes a custom value evaluation function (equivalent to what you would pass to `lookup`) and separate operator evaluation function. This is used internally to implement partial evaluation and compilation.
 
 Note that all of these methods require the input to be pre-tokenized. Railyard does not know anything about your lexical grammar.
 
@@ -129,6 +137,13 @@ Railyard also has a couple of auxiliary methods to tweak the behavior of the par
 
 * use `parser.setImplicitOp(token: string)` to tell Railyard to use a default infix operator for values in hiatus; i.e., calling `parser.setImplicitOp('*');` will cause it to interpret the input `['a', '(', 'b', '+', '1', ')']` as equivalent to `['a', '*', '(', 'b', '+', '1', ')']`; i.e., `parser.interpret('a ( b + 1 )'.split(' ')) === parser.interpret('a * ( b + 1 )'.split(' '))`. Setting a certain operator token as the implicit operator does not change its precedence! If you want, e.g., implicit multiplication and explicit multiplication to have different precedence, you must register different operators with the same implementation.
 * use `parser.unaryFnAsPrefix(flag: boolean)` to tell Railyard whether to permit calling unary functions as unary prefix operators without parentheses. The default is `true`. If set to `false`, examples like `sin t` will throw an error, requiring `sin ( t )` instead.
+
+Security Details
+----------------
+
+If you restrict your usage to parsing, or the `interpret` or `partial` methods, `Railyard` will perform no `eval`s, through any means--unless, of course, you put a call to `eval` in your own operator implementations or lookup function.
+
+The `compile` method will invoke implied `eval` through the use of the `new Function` constructor. However, no user-supplied data is ever executed; no input strings are included in the synthesized source code. The strings identifying free variables are stored separately and used by a wrapper function to map the fields of argument objects provided to compiled functions to positional argument slots.
 
 Appendix: Intrinsic Implementations
 -----------------------------------

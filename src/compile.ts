@@ -11,11 +11,11 @@ export function compile(ast: AstNode){
     return { fn: () => value, free };
   }
 
-  let id = 0;
+  let cid = 0;
   const context: unknown[] = [];
 
   const encodings = new Map<unknown, string>();
-  const cache = (value: unknown) => {
+  const cache_internal = (value: unknown) => {
     let code = encodings.get(value);
     if (typeof code !== 'undefined') { return code; }
     switch (typeof value) {
@@ -26,9 +26,9 @@ export function compile(ast: AstNode){
         break;
       }
       default: {
-        const d = id++;
+        const d = cid++;
         context[d] = value;
-        code = `c[${d}]`
+        code = `c${d}`
         break;
       }
     }
@@ -36,12 +36,23 @@ export function compile(ast: AstNode){
     return code;
   };
 
+  let aid = 0;
+  const argMap = new Map<string, number>();
+  const cache_args = (value: string) => {
+    let id = argMap.get(value);
+    if (typeof id === 'undefined') {
+      id = aid++;
+      argMap.set(value, id);
+    }
+    return `a${id}`;
+  };
+
   const walk: (n: AstNode) => string = (node) => {
     switch (node.type) {
-      case 'result': return cache(node.value);
+      case 'result': return cache_internal(node.value);
       case 'value': {
         vars.add(node.value);
-        return `a[${JSON.stringify(node.value)}]`;
+        return cache_args(node.value);
       }
       case 'operator': {
         const { value: { op: { fn, name }, args } } = node;
@@ -50,7 +61,7 @@ export function compile(ast: AstNode){
         // External functions
         if (typeof fn === 'undefined') {
           ops.add(name);
-          return `a[${JSON.stringify(name)}](${arg_list.join(',')})`;
+          return `${cache_args(name)}(${arg_list.join(',')})`;
         }
 
         // Intrinsic functions
@@ -60,20 +71,21 @@ export function compile(ast: AstNode){
         if ((Math as any)[fn.name] === fn) { return `Math.${fn.name}(${arg_list.join(',')})`; }
 
         // Context functions
-        return `${cache(fn)}(${arg_list})`;
+        return `${cache_internal(fn)}(${arg_list})`;
       }
     }
   };
 
-  let fn: Function;
   const body = `return ${walk(ast)};`;
-  if (ops.size + vars.size === 0) {
-    if (id === 0) { fn = new Function(body); }
-    else { fn = (new Function('c', body)).bind(null, context); }
-  } else {
-    if (id === 0) { fn = new Function('a', body); }
-    else { fn = (new Function('c', 'a', body)).bind(null, context); }
-  }
+  const cvars = context.map((_,i) => `c${i}`);
+  const avars = Array.from({ length: aid }, (_, i) => `a${i}`);
+  const slots = [...argMap.entries()].sort(([,a],[,b]) => a - b).map(a => a[0]);
+   
+  const inner = cid === 0 ? new Function(...avars, body) :
+    (new Function(...cvars, ...avars, body)).bind(null, ...context);
+
+  const fn: Function = (args: { [key: string]: unknown }) =>
+    inner.apply(null, slots.map(a => args[a]));
 
   return { fn, free };
 }

@@ -1,6 +1,6 @@
 import { OpInfo, Token } from "./types";
 
-export function interpret<T>(tokens: Iterable<Token>, impl: (op: OpInfo, ...args: T[]) => T, wrap: (a: string) => T) {
+export function interpret<T>(tokens: Iterable<Token>, wrap: (a: string) => T, impl: (op: OpInfo, ...args: T[]) => T) {
   const vstack: T[] = [];
   for(const token of tokens){
     if(token.type === "operator"){
