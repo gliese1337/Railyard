@@ -3,6 +3,7 @@ export const SUB: unique symbol = Symbol();
 export const MUL: unique symbol = Symbol();
 export const DIV: unique symbol = Symbol();
 export const REM: unique symbol = Symbol();
+export const EXP: unique symbol = Symbol();
 
 export const XOR: unique symbol = Symbol();
 export const XNR: unique symbol = Symbol();
@@ -16,7 +17,7 @@ export const INV: unique symbol = Symbol();
 export const NOT: unique symbol = Symbol();
 
 export type Intrinsic =
-  typeof ADD | typeof SUB | typeof MUL | typeof DIV | typeof REM |
+  typeof ADD | typeof SUB | typeof MUL | typeof DIV | typeof REM | typeof EXP |
   typeof XOR | typeof XNR | typeof AND | typeof NND | typeof ORR | typeof NOR |
   typeof NEG | typeof INV | typeof NOT;
 
@@ -26,6 +27,8 @@ export type InfixInfo = {
   precedence: number;
   associativity: "left" | "right";
   fn?: Intrinsic | ((a: any, b: any) => unknown);
+  partial?: (op: OpNode, a: AstNode, b: AstNode) => AstNode;
+  js_inline?: (a: string, b: string) => string;
 };
 
 export type FnInfo = {
@@ -33,6 +36,8 @@ export type FnInfo = {
   name: string,
   arity: number;
   fn?: Intrinsic | ((...args: any[]) => unknown);
+  partial?: (op: OpNode, ...args: AstNode[]) => AstNode;
+  js_inline?: (...args: string[]) => string;
 };
 
 export type OpInfo = InfixInfo | FnInfo;

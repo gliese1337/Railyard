@@ -11,7 +11,7 @@ JavaScript:
 ```js
 const {
   Railyard,
-  ADD, SUB, MUL, DIV, REM,
+  ADD, SUB, MUL, DIV, REM, EXP,
   XOR, XNR, AND, NND, ORR, NOR,
   NEG, INV, NOT,
 } = require('railyard');
@@ -21,7 +21,7 @@ TypeScript:
 ```ts
 import {
   Railyard,
-  ADD, SUB, MUL, DIV, REM,
+  ADD, SUB, MUL, DIV, REM, EXP,
   XOR, XNR, AND, NND, ORR, NOR,
   NEG, INV, NOT, Intrinsic,
   FnInfo, InfixInfo, OpInfo,
@@ -39,6 +39,8 @@ type InfixInfo = {
     precedence: number; // How tightly this operator binds
     associativity: "left" | "right"; // In which direction it binds with equal-precedence operators 
     fn?: Intrinsic | ((a: any, b: any) => unknown);  // Optional implementation
+    partial?: (op: OpNode, a: AstNode, b: AstNode) => AstNode; // Optional partial evaluation function.
+    js_inline?: (a: string, b: string) => string; // Optional JS target compiler implementation.
 }
 
 type FnInfo = {
@@ -46,6 +48,8 @@ type FnInfo = {
     name: string; // String identifying the operator
     arity: number; // How many arguments the function takes
     fn?: Intrinsic | ((...args: any[]) => unknown); // Optional implementation
+    partial?: (op: OpNode, ...args: AstNode[]) => AstNode; // Optional partial evaluation function.
+    js_inline?: (...args: string[]) => string; // Optional JS target compiler implementation.
 }
 ```
 
@@ -64,7 +68,7 @@ const parser = new Railyard()
     .register({ type: 'function', name: 'xor', arity: 2, fn: (a, b) => a ^ b });
 ```
 
-The `parser.register` method takes an `OpInfo` object--either `InfixInfo` or `FnInfo`. Function calls bind more tightly than any infix operators, and are right-associative. If you do not provide implementations, the parser can still *parse*, but it will not be able to evaluate the parsed expressions.
+The `parser.register` method takes an `OpInfo` object--either `InfixInfo` or `FnInfo`. Function calls bind more tightly than any infix operators, and are right-associative. If you do not provide implementations, the parser can still *parse*, but it will not be able to evaluate or compile the parsed expressions.
 
 Note that, by default, functions with an arity of 1 (unary functions) are treated as unary prefix operators. I.e., `sin ( t )` parses identically to `sin t`. However, due to the maximal binding precedence of function calls, `sin 2 + 3` is equal to `sin ( 2 ) + 3`, *not* `sin ( 2 + 3 )`. Similarly, `a + - b * c` is equivalent to `a + ( - ( b ) ) * c`.
 
@@ -83,7 +87,7 @@ const parser = new Railyard()
     .register({ type: 'function', name: 'xor', arity: 2, fn: XOR });
 ```
 
-The use of `Intrinsic`s makes not difference to parsing or interpretation, but does allow more effective partial evaluation and improves the performance of compiled expressions, and can be convenient to avoid re-implementing lots of simple functions anyway. The use of unwrapped, built-n `Math` functions also improves compilation efficiency, as calls to those functions can be directly inlined into compiled code.
+The use of `Intrinsic`s makes no difference to parsing or interpretation, but does allow more effective partial evaluation and improves the performance of compiled expressions, and can be convenient to avoid re-implementing lots of simple functions anyway. The use of unwrapped, built-in `Math` functions also improves compilation efficiency, as calls to those functions can be directly inlined into compiled code. Similar efficiency gains for custom functions can be achieved by providing `js_inline` functions. During compilation, if `fn` is *not* an intrinsic symbol or built-in `Math` function, and `js_inline` is provided, then `js_inline` will be called with strings representing the compiled argument expressions in order to produce a new string representing the compiled operator expression, which will be directly included in the body of the final compiled function.
 
 At this point, you can call
 * `parser.parseToRPN(tokens: Iterable<string>): Generator<Token>` This method returns a version of the input expression converted into de-parenthesized Reverse Polish Notation, with each original string token wrapped up in a `Token` data structure indicating whether it was originally an input value or an operator. The structure of the `Token` data type is `type Token = { type: "value"; value: string; } | { type: "operator"; value: OpInfo; };`
@@ -119,9 +123,11 @@ parser.interpret('2 ^ 2 ^ 3 b ( a + 3 )'.split(' ')) === 7680
 If you do not have complete operator implementations, you can still use the `partial` and `compile` methods:
 
 * `parser.partial(tokens: Iterable<string>): { ast: AstNode; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns the resulting minimized AST, along with sets of the names of unimplemented methods and missing values that would be needed to complete evaluation. The structure of the `ASTNode` data type is augmented in this case as follows: `type AstNode = { type: "operator"; value: { op: OpInfo; args: AstNode[]; }; } | { type: "result"; value: string; };`, in which a `ResultNode` indicates a final value, which should not be evaluated any further.
-* `parser.compile(tokens: Iterable<string>): { fn: Function; free: { ops: Set<string>; vars: Set<string>; }; }` This method performs partial evaluation and returns a compiled JavaScript function which can complete evaluation of the expression when given the necessary missing values, along with the names of unimplemented methods and missing values that it needs. To run the returned function, pass in an object whose keys are the missing operator and value names.
+* `parser.compile(tokens: Iterable<string>): { fn: Function; free: { ops: Set<string>; vars: Set<string>; }; }` This method first performs partial evaluation, then synthesizes code from the resulting AST and returns a compiled JavaScript function which can complete evaluation of the expression when given the necessary missing values, along with the names of unimplemented methods and missing values that it needs. To run the returned function, pass in an object whose keys are the missing operator and value names.
 
-The `partial` and `compile` methods depend on a `lookup` function having been set which will throw an exception for missing values. Otherwise, whatever you feel like returning will be treated as a perfectly respectable value and passed on to later stages of evaluation, without recording any missing inputs.
+Partial evaluation will call provided `fn` implementations whenever possible--that is, when an implementation exists, and all of the necessary arguments can be fully evaluated. In many cases, however, some compile-time computation can still be done even when some argument values are not yet known. If `fn` is an intrinsic symbol, these partial evaluations are already accounts for. Otherwise, you can use the `partial` field of an `OpInfo` definition to provide a custom function which will take in the operator `AstNode` (along with each of its argument `AstNode`s, pre-unpackaed for convenience) and returns an `AstNode` (either the original `OpNode` if nothing can be done or a replacement) representing the partially-evaluated result. 
+
+The `partial` and `compile` methods also depend on a `lookup` function having been set which will throw an exception for missing values. Otherwise, whatever you feel like returning will be treated as a perfectly respectable value and passed on to later stages of evaluation, without recording any missing inputs.
 
 Compilation takes longer than direct interpretation, but if you need to evaluate an expression multiple times with different values plugged in (e.g., for graphing user-provided functions), it can be well worth it!
 
@@ -157,6 +163,7 @@ The complete list of available `Intrinsic` functions is as follows:
   [MUL]: (a, b) => a * b,
   [DIV]: (a, b) => a / b,
   [REM]: (a, b) => a % b,
+  [EXP]: (a, b) => a ** b,
   [XOR]: (a, b) => a ^ b,
   [XNR]: (a, b) => ~(a ^ b),
   [AND]: (a, b) => a & b,
