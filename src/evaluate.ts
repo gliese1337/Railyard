@@ -18,23 +18,23 @@ export function partial(tokens: Iterable<Token>, wrap: (x: string) => unknown) {
   };
 
   const partial_impl = (op: OpInfo, ...args: AstNode[]) => {
-    let { fn } = op;
+    let { fn, partial } = op;
 
     const node =  opr(op, ...args);
 
-    // Unimplemented operations
-    if (typeof fn === 'undefined') { return node; }
-
-    // If all arguments are fully evaluated,
-    // we can continue evaluation.
-    if (args.every(a => a.type === 'result')) {
+    // If all arguments are fully evaluated, we can continue evaluation.
+    if (typeof fn !== 'undefined' && args.every(a => a.type === 'result')) {
       const arg_vals = args.map(a => a.value);
       if (typeof fn === 'symbol') { fn = iFns[fn]; }
       return res(fn.apply(null, arg_vals as any));
     }
 
     // If we can't evaluate, try identity transformations
-    return (typeof fn === 'symbol') ? pFns[fn](node, ...args) : node;
+    if (typeof fn === 'symbol') { return pFns[fn](node, ...args); }
+    if (typeof partial === 'function') { return (partial as any)(node, ...args); }
+    
+    // Unimplemented operations
+    return node;
   };
   
   return interpret<AstNode>(tokens, val2node, partial_impl);

@@ -1,13 +1,14 @@
-import { Intrinsic, ADD, SUB, MUL, DIV, REM, XOR, XNR, AND, NND, ORR, NOR, NEG, INV, NOT, AstNode, OpNode, FnInfo, opr, res } from "./types";
+import { Intrinsic, ADD, SUB, MUL, DIV, REM, EXP, XOR, XNR, AND, NND, ORR, NOR, NEG, INV, NOT, AstNode, OpNode, FnInfo, opr, res } from "./types";
 
 /* Intrinsic Implementations */
 
-export const iFns: { [key in Intrinsic]: (...args: any[]) => unknown } = {
+export const iFns: { [key in Intrinsic]: (...args: any[]) => any } = {
   [ADD]: (a: number, b: number) => a + b,
   [SUB]: (a: number, b: number) => a - b,
   [MUL]: (a: number, b: number) => a * b,
   [DIV]: (a: number, b: number) => a / b,
   [REM]: (a: number, b: number) => a % b,
+  [EXP]: (a: number, b: number) => a ** b,
   [XOR]: (a: number, b: number) => a ^ b,
   [XNR]: (a: number, b: number) => ~(a ^ b),
   [AND]: (a: number, b: number) => a & b,
@@ -27,6 +28,7 @@ export const cFns: { [key in Intrinsic]: (...args: string[]) => string } = {
   [MUL]: (a: string, b: string) => `(${a}*${b})`,
   [DIV]: (a: string, b: string) => `(${a}/${b})`,
   [REM]: (a: string, b: string) => `(${a}%${b})`,
+  [EXP]: (a: string, b: string) => `(${a}**${b})`,
   [XOR]: (a: string, b: string) => `(${a}^${b})`,
   [XNR]: (a: string, b: string) => `(~(${a}^${b}))`,
   [AND]: (a: string, b: string) => `(${a}&${b})`,
@@ -55,6 +57,7 @@ export const pFns: { [key in Intrinsic]: (op: OpNode, ...args: AstNode[]) => Ast
   [MUL]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? a : is(b,0) ? b : is(a,1) ? b : is(b,1) ? a : op,
   [DIV]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? res(0) : is(b,1) ? a : op,
   [REM]: (op: OpNode,_a: AstNode,_b: AstNode) => op,
+  [EXP]: (op: OpNode,_a: AstNode, b: AstNode) => is(b,0) ? res(1) : op,
   [XOR]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? b : is(b,0) ? a : op,
   [XNR]: (op: OpNode,_a: AstNode,_b: AstNode) => op,
   [AND]: (op: OpNode, a: AstNode, b: AstNode) => is(a,0) ? a : is(b,0) ? b : op,

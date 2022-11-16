@@ -55,20 +55,23 @@ export function compile(ast: AstNode){
         return cache_args(node.value);
       }
       case 'operator': {
-        const { value: { op: { fn, name }, args } } = node;
+        const { value: { op: { fn, js_inline, name }, args } } = node;
         const arg_list = args.map(walk);
+
+        // Intrinsic functions
+        if (typeof fn === 'symbol') { return cFns[fn].call(null, ...arg_list); }
+
+        // Math functions
+        if (typeof fn === 'function' && (Math as any)[fn.name] === fn) { return `Math.${fn.name}(${arg_list.join(',')})`; }
+
+        // Inline functions
+        if (typeof js_inline === 'function') { return (js_inline as any)(...arg_list); }
 
         // External functions
         if (typeof fn === 'undefined') {
           ops.add(name);
           return `${cache_args(name)}(${arg_list.join(',')})`;
         }
-
-        // Intrinsic functions
-        if (typeof fn === 'symbol') { return cFns[fn].call(null, ...arg_list); }
-        
-        // Math functions
-        if ((Math as any)[fn.name] === fn) { return `Math.${fn.name}(${arg_list.join(',')})`; }
 
         // Context functions
         return `${cache_internal(fn)}(${arg_list})`;
